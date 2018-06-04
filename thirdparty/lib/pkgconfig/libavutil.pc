@@ -1,0 +1,14 @@
+prefix=/Users/Eon/Development/godot-videodecoder/thirdparty
+exec_prefix=${prefix}
+libdir=/Users/Eon/Development/godot-videodecoder/thirdparty/lib
+includedir=/Users/Eon/Development/godot-videodecoder/thirdparty/include
+
+Name: libavutil
+Description: FFmpeg utility library
+Version: 56.14.100
+Requires: 
+Requires.private: 
+Conflicts:
+Libs: -L${libdir}  -lavutil 
+Libs.private: -pthread -lm -Wl,-framework,OpenCL -framework VideoToolbox -framework CoreFoundation -framework CoreMedia -framework CoreVideo -framework CoreServices
+Cflags: -I${includedir}
