@@ -2,36 +2,37 @@
 #ifndef GODOT_GDNATIVE_API_STRUCT_H
 #define GODOT_GDNATIVE_API_STRUCT_H
 
-#include <gdnative/gdnative.h>
 #include <arvr/godot_arvr.h>
+#include <gdnative/gdnative.h>
 #include <nativescript/godot_nativescript.h>
 #include <pluginscript/godot_pluginscript.h>
 #include <videodecoder/godot_videodecoder.h>
 
-#define GDNATIVE_API_INIT(options) do {  \
-	extern const godot_gdnative_core_api_struct *_gdnative_wrapper_api_struct;  \
-	extern const godot_gdnative_ext_nativescript_api_struct *_gdnative_wrapper_nativescript_api_struct;  \
-	extern const godot_gdnative_ext_pluginscript_api_struct *_gdnative_wrapper_pluginscript_api_struct;  \
-	extern const godot_gdnative_ext_arvr_api_struct *_gdnative_wrapper_arvr_api_struct;  \
-	extern const godot_gdnative_ext_videodecoder_api_struct *_gdnative_wrapper_videodecoder_api_struct;  \
-	_gdnative_wrapper_api_struct = options->api_struct;  \
-	for (unsigned int i = 0; i < _gdnative_wrapper_api_struct->num_extensions; i++) {   \
-		switch (_gdnative_wrapper_api_struct->extensions[i]->type) {  \
-			case GDNATIVE_EXT_NATIVESCRIPT:  \
-				_gdnative_wrapper_nativescript_api_struct = (godot_gdnative_ext_nativescript_api_struct *) _gdnative_wrapper_api_struct->extensions[i];  \
-				break;  \
-			case GDNATIVE_EXT_PLUGINSCRIPT:  \
-				_gdnative_wrapper_pluginscript_api_struct = (godot_gdnative_ext_pluginscript_api_struct *) _gdnative_wrapper_api_struct->extensions[i];  \
-				break;  \
-			case GDNATIVE_EXT_ARVR:  \
-				_gdnative_wrapper_arvr_api_struct = (godot_gdnative_ext_arvr_api_struct *) _gdnative_wrapper_api_struct->extensions[i];  \
-				break;  \
-			case GDNATIVE_EXT_VIDEODECODER:  \
-				_gdnative_wrapper_videodecoder_api_struct = (godot_gdnative_ext_videodecoder_api_struct *) _gdnative_wrapper_api_struct->extensions[i];  \
-				break;  \
-		}  \
-	}  \
- } while (0)
+#define GDNATIVE_API_INIT(options)                                                                                                                         \
+	do {                                                                                                                                                   \
+		extern const godot_gdnative_core_api_struct *_gdnative_wrapper_api_struct;                                                                         \
+		extern const godot_gdnative_ext_nativescript_api_struct *_gdnative_wrapper_nativescript_api_struct;                                                \
+		extern const godot_gdnative_ext_pluginscript_api_struct *_gdnative_wrapper_pluginscript_api_struct;                                                \
+		extern const godot_gdnative_ext_arvr_api_struct *_gdnative_wrapper_arvr_api_struct;                                                                \
+		extern const godot_gdnative_ext_videodecoder_api_struct *_gdnative_wrapper_videodecoder_api_struct;                                                \
+		_gdnative_wrapper_api_struct = options->api_struct;                                                                                                \
+		for (unsigned int i = 0; i < _gdnative_wrapper_api_struct->num_extensions; i++) {                                                                  \
+			switch (_gdnative_wrapper_api_struct->extensions[i]->type) {                                                                                   \
+				case GDNATIVE_EXT_NATIVESCRIPT:                                                                                                            \
+					_gdnative_wrapper_nativescript_api_struct = (godot_gdnative_ext_nativescript_api_struct *)_gdnative_wrapper_api_struct->extensions[i]; \
+					break;                                                                                                                                 \
+				case GDNATIVE_EXT_PLUGINSCRIPT:                                                                                                            \
+					_gdnative_wrapper_pluginscript_api_struct = (godot_gdnative_ext_pluginscript_api_struct *)_gdnative_wrapper_api_struct->extensions[i]; \
+					break;                                                                                                                                 \
+				case GDNATIVE_EXT_ARVR:                                                                                                                    \
+					_gdnative_wrapper_arvr_api_struct = (godot_gdnative_ext_arvr_api_struct *)_gdnative_wrapper_api_struct->extensions[i];                 \
+					break;                                                                                                                                 \
+				case GDNATIVE_EXT_VIDEODECODER:                                                                                                            \
+					_gdnative_wrapper_videodecoder_api_struct = (godot_gdnative_ext_videodecoder_api_struct *)_gdnative_wrapper_api_struct->extensions[i]; \
+					break;                                                                                                                                 \
+			}                                                                                                                                              \
+		}                                                                                                                                                  \
+	} while (0)
 
 #ifdef __cplusplus
 extern "C" {
@@ -105,6 +106,7 @@ typedef struct godot_gdnative_ext_videodecoder_api_struct {
 	const godot_gdnative_api_struct *next;
 	godot_int (*godot_videodecoder_read_packet)(void *file_ptr, uint8_t *buf, int buf_size);
 	int64_t (*godot_videodecoder_seek_packet)(void *file_ptr, int64_t pos, int whence);
+	void (*godot_videodecoder_register_decoder)(const godot_videodecoder_interface_gdnative *p_interface);
 } godot_gdnative_ext_videodecoder_api_struct;
 
 typedef struct godot_gdnative_core_api_struct {

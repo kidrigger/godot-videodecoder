@@ -1,0 +1,5 @@
+.vscode/**
+.sconsign.dblite
+*.o
+*.os
+bin/
