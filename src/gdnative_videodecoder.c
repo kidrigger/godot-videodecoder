@@ -7,12 +7,27 @@
 #include <stdint.h>
 
 typedef struct {
-	godot_object *instance;
+	godot_object *instance; // Don't clean
+	uint8_t *io_buffer; // CLEANUP
+	AVIOContext *io_ctx; // CLEANUP
 } videodecoder_data_struct;
+
+const godot_int IO_BUFFER_SIZE = 64 * 1024; // File reading buffer of 64 KiB?
 
 const godot_gdnative_core_api_struct *api = NULL;
 const godot_gdnative_ext_nativescript_api_struct *nativescript_api = NULL;
 const godot_gdnative_ext_videodecoder_api_struct *videodecoder_api = NULL;
+
+// Cleanup should empty the struct to the point where you can open a new file from.
+static void _cleanup(videodecoder_data_struct *data) {
+	if (data->io_buffer != NULL) {
+		api->godot_free(data->io_buffer);
+		data->io_buffer = NULL;
+	}
+	if (data->io_ctx != NULL) {
+		avio_context_free(&data->io_ctx);
+	}
+}
 
 extern const godot_videodecoder_interface_gdnative plugin_interface;
 
@@ -44,12 +59,38 @@ void GDN_EXPORT godot_gdnative_singleton() {
 
 void *godot_videodecoder_constructor(godot_object *p_instance) {
 	videodecoder_data_struct *videodecoder_data = api->godot_alloc(sizeof(videodecoder_data_struct));
+
 	videodecoder_data->instance = p_instance;
+
+	videodecoder_data->io_buffer = NULL;
+	videodecoder_data->io_ctx = NULL;
+
+	// TODO: DEBUG
+	char msg[] = "ctor()";
+	godot_string str;
+	api->godot_string_new(&str);
+	api->godot_string_parse_utf8(&str, msg);
+	api->godot_print(&str);
+	api->godot_string_destroy(&str);
+	// TODO: DEBUG
+
 	return videodecoder_data;
 }
 void godot_videodecoder_destructor(void *p_data) {
 	videodecoder_data_struct *data = (videodecoder_data_struct *)p_data;
+	_cleanup(data);
 	data->instance = NULL;
+	api->godot_free(data);
+	data = NULL; // Not needed, but just to be safe.
+
+	// TODO: DEBUG
+	char msg[] = "dtor()";
+	godot_string str;
+	api->godot_string_new(&str);
+	api->godot_string_parse_utf8(&str, msg);
+	api->godot_print(&str);
+	api->godot_string_destroy(&str);
+	// TODO: DEBUG
 }
 
 char *godot_videodecoder_get_plugin_name(void) {
@@ -58,16 +99,44 @@ char *godot_videodecoder_get_plugin_name(void) {
 
 godot_bool godot_videodecoder_open_file(void *p_data, void *file) {
 	videodecoder_data_struct *data = (videodecoder_data_struct *)p_data;
-	// TODO: DEBUG
-	char msg[] = "open_file()";
-	godot_string str;
-	api->godot_string_new(&str);
-	api->godot_string_parse_utf8(&str, msg);
-	api->godot_print(&str);
-	api->godot_string_destroy(&str);
-	// TODO: DEBUG
-	return true;
+
+	_cleanup(data);
+
+	data->io_buffer = (uint8_t *)api->godot_alloc(IO_BUFFER_SIZE * sizeof(uint8_t));
+
+	godot_int read_bytes = videodecoder_api->godot_videodecoder_file_read(file, data->io_buffer, IO_BUFFER_SIZE);
+
+	if (read_bytes < IO_BUFFER_SIZE) {
+		// something went wrong, we should be able to read atleast one buffer length.
+		_cleanup(data);
+		api->godot_print_warning("Couldn't read file beyond 64 KiB.", "godot_videodecoder_open_file()", "gdnative_videodecoder.c", __LINE__);
+		return GODOT_FALSE;
+	}
+
+	// Rewind to 0
+	videodecoder_api->godot_videodecoder_file_seek(file, 0, SEEK_SET);
+
+	// Determine input format
+	AVProbeData probe_data;
+	probe_data.buf = data->io_buffer;
+	probe_data.buf_size = IO_BUFFER_SIZE;
+	probe_data.filename = "";
+	AVInputFormat *input_format = av_probe_input_format(&probe_data, 1);
+
+	data->io_ctx = avio_alloc_context(data->io_buffer, IO_BUFFER_SIZE, 0, file,
+			videodecoder_api->godot_videodecoder_file_read, NULL,
+			videodecoder_api->godot_videodecoder_file_seek);
+
+	if (data->io_ctx == NULL) {
+		_cleanup(data);
+		api->godot_print_warning("Could not allocate IO context.", "godot_videodecoder_open_file()", "gdnative_videodecoder.c", __LINE__);
+		return GODOT_FALSE;
+	}
+
+	return GODOT_TRUE;
 }
+
+/* ---------------------- TODO ------------------------- */
 godot_real godot_videodecoder_get_length(const void *p_data) {
 	videodecoder_data_struct *data = (videodecoder_data_struct *)p_data;
 	// TODO: DEBUG

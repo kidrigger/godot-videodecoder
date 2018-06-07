@@ -55,8 +55,8 @@ typedef struct
 } godot_videodecoder_interface_gdnative;
 
 // FileAccess wrappers for custom FFmpeg IO
-godot_int GDAPI godot_videodecoder_read_packet(void *file_ptr, uint8_t *buf, int buf_size);
-int64_t GDAPI godot_videodecoder_seek_packet(void *file_ptr, int64_t pos, int whence);
+godot_int GDAPI godot_videodecoder_file_read(void *file_ptr, uint8_t *buf, int buf_size);
+int64_t GDAPI godot_videodecoder_file_seek(void *file_ptr, int64_t pos, int whence);
 void GDAPI godot_videodecoder_register_decoder(const godot_videodecoder_interface_gdnative *p_interface);
 
 #ifdef __cplusplus

@@ -10,12 +10,15 @@ env.Append(CPPPATH=['#thirdparty/include'])
 env.Append(CPPPATH=['#godot_include'])
 
 env.Append(LIBPATH=['#thirdparty/lib'])
+env.Append(LIBS=['avformat','avutil'])
 
 sources = ['#src/gdnative_videodecoder.c']
 
-
+output_path = ""
 
 if env['test']:
-    env.SharedLibrary('#test/addons/bin/'+env['platform']+'/'+'gdnative_videodecoder',sources)
+    output_path = '#test/addons/bin/'+env['platform']+'/'
 else:
-    env.SharedLibrary('#bin/gdnative_videodecoder',sources)
+    output_path = '#bin/'
+
+env.SharedLibrary(output_path+'gdnative_videodecoder',sources)

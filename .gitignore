@@ -3,3 +3,6 @@
 *.o
 *.os
 bin/
+.import/
+.DS_Store
+the_crazy_stacktrace_log
