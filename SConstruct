@@ -9,6 +9,8 @@ env = Environment(variables=opts)
 env.Append(CPPPATH=['#thirdparty/include'])
 env.Append(CPPPATH=['#godot_include'])
 
+env.Append(LIBPATH=['#thirdparty/lib'])
+
 sources = ['#src/gdnative_videodecoder.c']
 
 

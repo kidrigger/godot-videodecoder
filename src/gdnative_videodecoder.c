@@ -8,7 +8,6 @@
 
 typedef struct {
 	godot_object *instance;
-	godot_string name;
 } videodecoder_data_struct;
 
 const godot_gdnative_core_api_struct *api = NULL;
@@ -46,9 +45,6 @@ void GDN_EXPORT godot_gdnative_singleton() {
 void *godot_videodecoder_constructor(godot_object *p_instance) {
 	videodecoder_data_struct *videodecoder_data = api->godot_alloc(sizeof(videodecoder_data_struct));
 	videodecoder_data->instance = p_instance;
-	api->godot_string_new(&videodecoder_data->name);
-	char name[] = "FFMPEG";
-	api->godot_string_parse_utf8(&videodecoder_data->name, name);
 	return videodecoder_data;
 }
 void godot_videodecoder_destructor(void *p_data) {
@@ -62,38 +58,120 @@ char *godot_videodecoder_get_plugin_name(void) {
 
 godot_bool godot_videodecoder_open_file(void *p_data, void *file) {
 	videodecoder_data_struct *data = (videodecoder_data_struct *)p_data;
+	// TODO: DEBUG
+	char msg[] = "open_file()";
+	godot_string str;
+	api->godot_string_new(&str);
+	api->godot_string_parse_utf8(&str, msg);
+	api->godot_print(&str);
+	api->godot_string_destroy(&str);
+	// TODO: DEBUG
 	return true;
 }
 godot_real godot_videodecoder_get_length(const void *p_data) {
 	videodecoder_data_struct *data = (videodecoder_data_struct *)p_data;
+	// TODO: DEBUG
+	char msg[] = "get_length()";
+	godot_string str;
+	api->godot_string_new(&str);
+	api->godot_string_parse_utf8(&str, msg);
+	api->godot_print(&str);
+	api->godot_string_destroy(&str);
+	// TODO: DEBUG
 	return 0;
 }
 godot_real godot_videodecoder_get_playback_position(const void *p_data) {
 	videodecoder_data_struct *data = (videodecoder_data_struct *)p_data;
+	// TODO: DEBUG
+	char msg[] = "get_playback_position()";
+	godot_string str;
+	api->godot_string_new(&str);
+	api->godot_string_parse_utf8(&str, msg);
+	api->godot_print(&str);
+	api->godot_string_destroy(&str);
+	// TODO: DEBUG
 	return 0;
 }
 void godot_videodecoder_seek(void *p_data, godot_real p_time) {
 	videodecoder_data_struct *data = (videodecoder_data_struct *)p_data;
+	// TODO: DEBUG
+	char msg[] = "seek()";
+	godot_string str;
+	api->godot_string_new(&str);
+	api->godot_string_parse_utf8(&str, msg);
+	api->godot_print(&str);
+	api->godot_string_destroy(&str);
+	// TODO: DEBUG
 }
 void godot_videodecoder_set_audio_track(void *p_data, godot_int p_audiotrack) {
 	videodecoder_data_struct *data = (videodecoder_data_struct *)p_data;
+	// TODO: DEBUG
+	char msg[] = "set_audio_track()";
+	godot_string str;
+	api->godot_string_new(&str);
+	api->godot_string_parse_utf8(&str, msg);
+	api->godot_print(&str);
+	api->godot_string_destroy(&str);
+	// TODO: DEBUG
 }
 void *godot_videodecoder_get_texture(void *p_data) {
 	videodecoder_data_struct *data = (videodecoder_data_struct *)p_data;
+	// TODO: DEBUG
+	char msg[] = "get_texture()";
+	godot_string str;
+	api->godot_string_new(&str);
+	api->godot_string_parse_utf8(&str, msg);
+	api->godot_print(&str);
+	api->godot_string_destroy(&str);
+	// TODO: DEBUG
 	return NULL;
 } // TODO: return Needs to be Ref<Texture>
 void godot_videodecoder_update(void *p_data, godot_real p_delta) {
 	videodecoder_data_struct *data = (videodecoder_data_struct *)p_data;
+	// TODO: DEBUG
+	/*
+	char msg[] = "update()";
+	godot_string str;
+	api->godot_string_new(&str);
+	api->godot_string_parse_utf8(&str, msg);
+	api->godot_print(&str);
+	api->godot_string_destroy(&str);
+	*/
+	// TODO: DEBUG
 }
 void godot_videodecoder_set_mix_callback(void *p_data, void *p_callback, void *p_userdata) {
 	videodecoder_data_struct *data = (videodecoder_data_struct *)p_data;
+	// TODO: DEBUG
+	char msg[] = "set_mix_callback()";
+	godot_string str;
+	api->godot_string_new(&str);
+	api->godot_string_parse_utf8(&str, msg);
+	api->godot_print(&str);
+	api->godot_string_destroy(&str);
+	// TODO: DEBUG
 } // TODO: p_callback Needs to be AudioMixCallback
 godot_int godot_videodecoder_get_channels(const void *p_data) {
 	videodecoder_data_struct *data = (videodecoder_data_struct *)p_data;
+	// TODO: DEBUG
+	char msg[] = "get_channels()";
+	godot_string str;
+	api->godot_string_new(&str);
+	api->godot_string_parse_utf8(&str, msg);
+	api->godot_print(&str);
+	api->godot_string_destroy(&str);
+	// TODO: DEBUG
 	return 0;
 }
 godot_int godot_videodecoder_get_mix_rate(const void *p_data) {
 	videodecoder_data_struct *data = (videodecoder_data_struct *)p_data;
+	// TODO: DEBUG
+	char msg[] = "get_mix_rate()";
+	godot_string str;
+	api->godot_string_new(&str);
+	api->godot_string_parse_utf8(&str, msg);
+	api->godot_print(&str);
+	api->godot_string_destroy(&str);
+	// TODO: DEBUG
 	return 0;
 }
 
