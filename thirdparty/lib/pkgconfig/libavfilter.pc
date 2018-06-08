@@ -1,7 +1,7 @@
-prefix=/Users/Eon/Development/godot-videodecoder/thirdparty
+prefix=/Users/Eon/Development/godot-videodecoder/test/addons/bin/osx
 exec_prefix=${prefix}
-libdir=/Users/Eon/Development/godot-videodecoder/thirdparty/lib
-includedir=/Users/Eon/Development/godot-videodecoder/thirdparty/include
+libdir=/Users/Eon/Development/godot-videodecoder/test/addons/bin/osx/lib
+includedir=/Users/Eon/Development/godot-videodecoder/test/addons/bin/osx/include
 
 Name: libavfilter
 Description: FFmpeg audio/video filtering library

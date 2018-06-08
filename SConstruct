@@ -2,15 +2,19 @@
 opts = Variables()
 
 opts.Add(BoolVariable('test','build to test',True))
-opts.Add(EnumVariable('platform','can be osx, linux or windows','osx',('osx','x11','win64'),map={'linux':'x11','windows':'win64'}))
+opts.Add(EnumVariable('platform','can be osx, linux (x11) or windows (win64)','osx',('osx','x11','win64'),
+                                        map={'linux':'x11','windows':'win64'}))
 
 env = Environment(variables=opts)
+
+env.Append(LINKFLAG='-Wl,-rpath,./lib')
 
 env.Append(CPPPATH=['#thirdparty/include'])
 env.Append(CPPPATH=['#godot_include'])
 
-env.Append(LIBPATH=['#thirdparty/lib'])
-env.Append(LIBS=['avformat','avutil'])
+env.Append(LIBPATH=['#test/addons/bin/osx/lib'])
+env.Append(LIBS=['avformat'])
+env.Append(LIBS=['avutil'])
 
 sources = ['#src/gdnative_videodecoder.c']
 

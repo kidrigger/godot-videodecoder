@@ -24,9 +24,9 @@ static void _cleanup(videodecoder_data_struct *data) {
 		api->godot_free(data->io_buffer);
 		data->io_buffer = NULL;
 	}
-	if (data->io_ctx != NULL) {
-		avio_context_free(&data->io_ctx);
-	}
+	// if (data->io_ctx != NULL) {
+	// 	avio_context_free(&data->io_ctx);
+	// }
 }
 
 extern const godot_videodecoder_interface_gdnative plugin_interface;
@@ -103,35 +103,48 @@ godot_bool godot_videodecoder_open_file(void *p_data, void *file) {
 	_cleanup(data);
 
 	data->io_buffer = (uint8_t *)api->godot_alloc(IO_BUFFER_SIZE * sizeof(uint8_t));
+	if (data->io_buffer == NULL) {
+		_cleanup(data);
+		api->godot_print_warning("Buffer couldn't be allocated", "godot_videodecoder_open_file()", __FILE__, __LINE__);
+		return GODOT_FALSE;
+	}
 
 	godot_int read_bytes = videodecoder_api->godot_videodecoder_file_read(file, data->io_buffer, IO_BUFFER_SIZE);
 
 	if (read_bytes < IO_BUFFER_SIZE) {
 		// something went wrong, we should be able to read atleast one buffer length.
 		_cleanup(data);
-		api->godot_print_warning("Couldn't read file beyond 64 KiB.", "godot_videodecoder_open_file()", "gdnative_videodecoder.c", __LINE__);
+		api->godot_print_warning("Couldn't read file beyond 64 KiB.", "godot_videodecoder_open_file()", __FILE__, __LINE__);
 		return GODOT_FALSE;
 	}
 
 	// Rewind to 0
 	videodecoder_api->godot_videodecoder_file_seek(file, 0, SEEK_SET);
 
+	api->godot_print_warning("", "", "gdn", __LINE__);
+	char hack[5] = "HACK"; // HACK: somehow solves a segfault in avutil
+
+	// HACK[5] can be placed above this
 	// Determine input format
 	AVProbeData probe_data;
+
 	probe_data.buf = data->io_buffer;
 	probe_data.buf_size = IO_BUFFER_SIZE;
 	probe_data.filename = "";
+
+	// HACK[5] can't be placed below this.
+
 	AVInputFormat *input_format = av_probe_input_format(&probe_data, 1);
 
-	data->io_ctx = avio_alloc_context(data->io_buffer, IO_BUFFER_SIZE, 0, file,
-			videodecoder_api->godot_videodecoder_file_read, NULL,
-			videodecoder_api->godot_videodecoder_file_seek);
+	// data->io_ctx = avio_alloc_context(data->io_buffer, IO_BUFFER_SIZE, 0, file,
+	// 		videodecoder_api->godot_videodecoder_file_read, NULL,
+	// 		videodecoder_api->godot_videodecoder_file_seek);
 
-	if (data->io_ctx == NULL) {
-		_cleanup(data);
-		api->godot_print_warning("Could not allocate IO context.", "godot_videodecoder_open_file()", "gdnative_videodecoder.c", __LINE__);
-		return GODOT_FALSE;
-	}
+	// if (data->io_ctx == NULL) {
+	// 	_cleanup(data);
+	// 	api->godot_print_warning("Could not allocate IO context.", "godot_videodecoder_open_file()", "gdnative_videodecoder.c", __LINE__);
+	// 	return GODOT_FALSE;
+	// }
 
 	return GODOT_TRUE;
 }

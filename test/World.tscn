@@ -1,16 +1,14 @@
 [gd_scene load_steps=2 format=2]
 
-[sub_resource type="VideoStreamFFMPEG" id=1]
-
-file = ""
+[ext_resource path="res://samples/echo-hereweare.ogv" type="VideoStream" id=1]
 
 [node name="VideoPlayer" type="VideoPlayer" index="0"]
 anchor_left = 0.0
 anchor_top = 0.0
 anchor_right = 0.0
 anchor_bottom = 0.0
-margin_right = 40.0
-margin_bottom = 40.0
+margin_right = 509.0
+margin_bottom = 328.0
 rect_pivot_offset = Vector2( 0, 0 )
 rect_clip_content = false
 mouse_filter = 0
@@ -18,9 +16,9 @@ mouse_default_cursor_shape = 0
 size_flags_horizontal = 1
 size_flags_vertical = 1
 audio_track = 0
-stream = SubResource( 1 )
+stream = ExtResource( 1 )
 volume_db = 0.0
-autoplay = false
+autoplay = true
 paused = false
 expand = true
 buffering_msec = 500
