@@ -47,8 +47,7 @@ typedef struct
 	godot_real (*get_playback_position)(const void *);
 	void (*seek)(void *, godot_real);
 	void (*set_audio_track)(void *, godot_int);
-	void *(*get_texture)(void *); // TODO: returntype Needs to be Ref<Texture>
-	void (*update)(void *, godot_real);
+	void *(*update)(void *, godot_real); // TODO: Return Texture
 	void (*set_mix_callback)(void *, void *, void *); // TODO: 2nd arg Needs to be AudioMixCallback
 	godot_int (*get_channels)(const void *);
 	godot_int (*get_mix_rate)(const void *);
