@@ -47,16 +47,18 @@ typedef struct
 	godot_real (*get_playback_position)(const void *);
 	void (*seek)(void *, godot_real);
 	void (*set_audio_track)(void *, godot_int);
-	void *(*update)(void *, godot_real); // TODO: Return Texture
+	godot_object *(*update)(void *, godot_real); // TODO: Return Texture
 	void (*set_mix_callback)(void *, void *, void *); // TODO: 2nd arg Needs to be AudioMixCallback
 	godot_int (*get_channels)(const void *);
 	godot_int (*get_mix_rate)(const void *);
+	godot_vector2 (*get_size)(const void *);
 } godot_videodecoder_interface_gdnative;
 
 // FileAccess wrappers for custom FFmpeg IO
 godot_int GDAPI godot_videodecoder_file_read(void *file_ptr, uint8_t *buf, int buf_size);
 int64_t GDAPI godot_videodecoder_file_seek(void *file_ptr, int64_t pos, int whence);
 void GDAPI godot_videodecoder_register_decoder(const godot_videodecoder_interface_gdnative *p_interface);
+godot_object GDAPI *godot_videodecoder_create_image(godot_pool_byte_array *byte_array, int x, int y);
 
 #ifdef __cplusplus
 }

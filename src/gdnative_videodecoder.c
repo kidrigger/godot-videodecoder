@@ -20,8 +20,10 @@ typedef struct videodecoder_data_struct {
 	AVFrame *frame_yuv; // CLEANUP
 	AVFrame *frame_rgb; // CLEANUP
 	struct SwsContext *sws_ctx; // CLEANUP
-	uint8_t *frame_buffer; // CLEANUP
-	godot_int frame_buffer_size;
+	uint8_t *frame_buffer;
+	int frame_buffer_size;
+	godot_pool_byte_array unwrapped_frame;
+	AVPacket packet;
 
 } videodecoder_data_struct;
 
@@ -35,46 +37,81 @@ const godot_gdnative_ext_videodecoder_api_struct *videodecoder_api = NULL;
 static void _cleanup(videodecoder_data_struct *data) {
 
 	if (data->sws_ctx != NULL) {
+
 		sws_freeContext(data->sws_ctx);
 		data->sws_ctx = NULL;
 	}
+
 	if (data->frame_rgb != NULL) {
+
 		av_frame_unref(data->frame_rgb);
 		data->frame_rgb = NULL;
 	}
+
 	if (data->frame_yuv != NULL) {
+
 		av_frame_unref(data->frame_yuv);
 		data->frame_yuv = NULL;
 	}
+
 	if (data->frame_buffer != NULL) {
 		api->godot_free(data->frame_buffer);
 		data->frame_buffer = NULL;
+		data->frame_buffer_size = 0;
 	}
+
 	if (data->codec_ctx != NULL) {
+
 		if (data->codec_open) {
+
 			avcodec_close(data->codec_ctx);
 			data->codec_open = GODOT_FALSE;
 		}
 		avcodec_free_context(&data->codec_ctx);
 		data->codec_ctx = NULL;
 	}
+
 	if (data->format_ctx != NULL) {
+
 		if (data->input_open) {
+
 			avformat_close_input(&data->format_ctx);
 			data->input_open = GODOT_FALSE;
 		}
 		avformat_free_context(data->format_ctx);
 		data->format_ctx = NULL;
 	}
+
 	if (data->io_ctx != NULL) {
+
 		avio_context_free(&data->io_ctx);
 		data->io_ctx = NULL;
 	}
+
 	if (data->io_buffer != NULL) {
+
 		api->godot_free(data->io_buffer);
 		data->io_buffer = NULL;
 	}
+
 	data->videostream_idx = 0;
+}
+
+static void _unwrap(godot_pool_byte_array *dest, AVFrame *frame, int width, int height) {
+
+	int frame_size = width * height * 4;
+	if (api->godot_pool_byte_array_size(dest) != frame_size) {
+		api->godot_pool_byte_array_resize(dest, frame_size);
+	}
+
+	godot_pool_byte_array_write_access *write_access = api->godot_pool_byte_array_write(dest);
+	uint8_t *write_ptr = api->godot_pool_byte_array_write_access_ptr(write_access);
+	int val = 0;
+	for (int y = 0; y < height; y++) {
+		memcpy(write_ptr, frame->data[0] + y * frame->linesize[0], width * 4);
+		write_ptr += width * 4;
+	}
+	api->godot_pool_byte_array_write_access_destroy(write_access);
 }
 
 extern const godot_videodecoder_interface_gdnative plugin_interface;
@@ -126,7 +163,11 @@ void *godot_videodecoder_constructor(godot_object *p_instance) {
 	data->frame_rgb = NULL;
 	data->frame_yuv = NULL;
 	data->sws_ctx = NULL;
+
 	data->frame_buffer = NULL;
+	data->frame_buffer_size = 0;
+
+	api->godot_pool_byte_array_new(&data->unwrapped_frame);
 
 	// DEBUG
 	printf("ctor()\n");
@@ -137,7 +178,10 @@ void godot_videodecoder_destructor(void *p_data) {
 
 	videodecoder_data_struct *data = (videodecoder_data_struct *)p_data;
 	_cleanup(data);
+
 	data->instance = NULL;
+	api->godot_pool_byte_array_destroy(&data->unwrapped_frame);
+
 	api->godot_free(data);
 	data = NULL; // Not needed, but just to be safe.
 
@@ -181,6 +225,7 @@ godot_bool godot_videodecoder_open_file(void *p_data, void *file) {
 
 	// Determine input format
 	// HACK: Avoids segfault, needs to be above probe_data. Minimum size of 5 bytes.
+	// Probably alignment.
 	uint64_t hack;
 	AVProbeData probe_data; // NOTE: Size of probe_data is 32 bytes.
 
@@ -297,17 +342,11 @@ godot_bool godot_videodecoder_open_file(void *p_data, void *file) {
 	}
 	data->codec_open = GODOT_TRUE;
 
-	// NOTE: Don't know why the align of 1, but I just doesn't work otherwise.
-	data->frame_buffer_size = av_image_get_buffer_size(AV_PIX_FMT_RGB24,
+	// NOTE: Align of 1 (I think it is for 32 bit alignment.) Doesn't work otherwise
+	data->frame_buffer_size = av_image_get_buffer_size(AV_PIX_FMT_RGB32,
 			data->codec_ctx->width, data->codec_ctx->height, 1);
-	data->frame_buffer = api->godot_alloc(data->frame_buffer_size);
 
-	if (data->frame_buffer == NULL) {
-
-		_cleanup(data);
-		api->godot_print_warning("Frame buffer alloc fail.", "godot_videodecoder_open_file()", __FILE__, __LINE__);
-		return GODOT_FALSE;
-	}
+	data->frame_buffer = (uint8_t *)api->godot_alloc(data->frame_buffer_size);
 
 	data->frame_rgb = av_frame_alloc();
 
@@ -329,14 +368,17 @@ godot_bool godot_videodecoder_open_file(void *p_data, void *file) {
 
 	int width = data->codec_ctx->width;
 	int height = data->codec_ctx->height;
-	av_image_fill_arrays(data->frame_rgb->data, data->frame_rgb->linesize, data->frame_buffer,
-			AV_PIX_FMT_RGB24, width, height, 1);
+	if (av_image_fill_arrays(data->frame_rgb->data, data->frame_rgb->linesize, data->frame_buffer,
+				AV_PIX_FMT_RGB32, width, height, 1) < 0) {
+
+		_cleanup(data);
+		api->godot_print_warning("Frame fill.", "godot_videodecoder_open_file()", __FILE__, __LINE__);
+		return GODOT_FALSE;
+	}
 
 	data->sws_ctx = sws_getContext(width, height, data->codec_ctx->pix_fmt,
-			width, height, AV_PIX_FMT_RGB24, SWS_BILINEAR,
+			width, height, AV_PIX_FMT_RGB32, SWS_BILINEAR,
 			NULL, NULL, NULL);
-
-	printf("%lld", data->format_ctx->duration);
 
 	return GODOT_TRUE;
 }
@@ -356,16 +398,43 @@ godot_real godot_videodecoder_get_length(const void *p_data) {
 	return (data->format_ctx->duration / (godot_real)AV_TIME_BASE);
 }
 
-/* ---------------------- TODO ------------------------- */
-
-void *godot_videodecoder_update(void *p_data, godot_real p_delta) {
+godot_object *godot_videodecoder_update(void *p_data, godot_real p_delta) {
 	videodecoder_data_struct *data = (videodecoder_data_struct *)p_data;
 
+	do {
+		if (av_read_frame(data->format_ctx, &data->packet) < 0) {
+			return NULL;
+		}
+	} while (data->packet.stream_index != data->videostream_idx);
+	printf("Read frame.\n");
+
+	int x;
+	do {
+		if (avcodec_send_packet(data->codec_ctx, &data->packet) >= 0) {
+			x = avcodec_receive_frame(data->codec_ctx, data->frame_yuv);
+			if (x != 0 && x != AVERROR(EAGAIN)) {
+				return NULL;
+			} else if (x == 0) {
+				sws_scale(data->sws_ctx, (uint8_t const *const *)data->frame_yuv->data, data->frame_yuv->linesize, 0,
+						data->codec_ctx->height, data->frame_rgb->data, data->frame_rgb->linesize);
+			}
+		}
+		printf("EAGAIN\n");
+	} while (x == AVERROR(EAGAIN));
+
+	printf("Go for image\n");
+
+	godot_object *img = NULL;
+	_unwrap(&data->unwrapped_frame, data->frame_rgb, data->codec_ctx->width, data->codec_ctx->height);
+	img = videodecoder_api->godot_videodecoder_create_image(&data->unwrapped_frame, data->codec_ctx->width, data->codec_ctx->height);
+	av_packet_unref(&data->packet);
 	// DEBUG
 	printf("update()\n");
 
-	return NULL;
+	return img;
 }
+
+/* ---------------------- TODO ------------------------- */
 
 godot_real godot_videodecoder_get_playback_position(const void *p_data) {
 	videodecoder_data_struct *data = (videodecoder_data_struct *)p_data;
@@ -412,6 +481,13 @@ godot_int godot_videodecoder_get_mix_rate(const void *p_data) {
 	return 0;
 }
 
+godot_vector2 godot_videodecoder_get_size(const void *p_data) {
+	videodecoder_data_struct *data = (videodecoder_data_struct *)p_data;
+	godot_vector2 vec;
+	api->godot_vector2_new(&vec, data->codec_ctx->width, data->codec_ctx->height);
+	return vec;
+}
+
 const godot_videodecoder_interface_gdnative plugin_interface = {
 	godot_videodecoder_constructor,
 	godot_videodecoder_destructor,
@@ -424,5 +500,6 @@ const godot_videodecoder_interface_gdnative plugin_interface = {
 	godot_videodecoder_update,
 	godot_videodecoder_set_mix_callback,
 	godot_videodecoder_get_channels,
-	godot_videodecoder_get_mix_rate
+	godot_videodecoder_get_mix_rate,
+	godot_videodecoder_get_size
 };
