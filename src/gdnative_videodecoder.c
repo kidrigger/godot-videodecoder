@@ -24,6 +24,7 @@ typedef struct videodecoder_data_struct {
 	int frame_buffer_size;
 	godot_pool_byte_array unwrapped_frame;
 	AVPacket packet;
+	godot_real time;
 
 } videodecoder_data_struct;
 
@@ -114,6 +115,10 @@ static void _unwrap(godot_pool_byte_array *dest, AVFrame *frame, int width, int 
 	api->godot_pool_byte_array_write_access_destroy(write_access);
 }
 
+static inline godot_real _avtime_to_sec(int64_t avtime) {
+	return (1000 * avtime) / (godot_real)AV_TIME_BASE;
+}
+
 extern const godot_videodecoder_interface_gdnative plugin_interface;
 
 static char *plugin_name = "test_plugin";
@@ -166,6 +171,8 @@ void *godot_videodecoder_constructor(godot_object *p_instance) {
 
 	data->frame_buffer = NULL;
 	data->frame_buffer_size = 0;
+
+	data->time = 0;
 
 	api->godot_pool_byte_array_new(&data->unwrapped_frame);
 
@@ -381,6 +388,8 @@ godot_bool godot_videodecoder_open_file(void *p_data, void *file) {
 			width, height, AV_PIX_FMT_RGB0, SWS_BILINEAR,
 			NULL, NULL, NULL);
 
+	data->time = 0;
+
 	return GODOT_TRUE;
 }
 
@@ -396,11 +405,18 @@ godot_real godot_videodecoder_get_length(const void *p_data) {
 		return -1;
 	}
 
-	return (data->format_ctx->duration / (godot_real)AV_TIME_BASE);
+	return _avtime_to_sec(data->format_ctx->duration);
 }
 
 godot_pool_byte_array *godot_videodecoder_update(void *p_data, godot_real p_delta) {
 	videodecoder_data_struct *data = (videodecoder_data_struct *)p_data;
+
+	data->time += p_delta;
+
+	if (data->time < _avtime_to_sec(data->frame_yuv->pts)) {
+		printf("Wait\n");
+		return &data->unwrapped_frame;
+	}
 
 	do {
 		if (av_read_frame(data->format_ctx, &data->packet) < 0) {
@@ -444,13 +460,14 @@ godot_real godot_videodecoder_get_playback_position(const void *p_data) {
 	if (data->frame_yuv == NULL) {
 		return 0;
 	}
-	return data->frame_yuv->pts / (godot_real)AV_TIME_BASE;
+	return _avtime_to_sec(data->frame_yuv->pts);
 }
 
 void godot_videodecoder_seek(void *p_data, godot_real p_time) {
 	videodecoder_data_struct *data = (videodecoder_data_struct *)p_data;
 
 	av_seek_frame(data->format_ctx, data->videostream_idx, (int64_t)(p_time * AV_TIME_BASE), SEEK_SET);
+	data->time = p_time;
 	// DEBUG
 	printf("seek()\n");
 	// DEBUG
