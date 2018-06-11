@@ -235,6 +235,7 @@ godot_bool godot_videodecoder_open_file(void *p_data, void *file) {
 
 	AVInputFormat *input_format = NULL;
 	input_format = av_probe_input_format(&probe_data, 1);
+	input_format->flags |= AVFMT_SEEK_TO_PTS;
 
 	if (input_format == NULL) {
 
@@ -377,7 +378,7 @@ godot_bool godot_videodecoder_open_file(void *p_data, void *file) {
 	}
 
 	data->sws_ctx = sws_getContext(width, height, data->codec_ctx->pix_fmt,
-			width, height, AV_PIX_FMT_RGB32, SWS_BILINEAR,
+			width, height, AV_PIX_FMT_RGB0, SWS_BILINEAR,
 			NULL, NULL, NULL);
 
 	return GODOT_TRUE;
@@ -398,11 +399,12 @@ godot_real godot_videodecoder_get_length(const void *p_data) {
 	return (data->format_ctx->duration / (godot_real)AV_TIME_BASE);
 }
 
-godot_object *godot_videodecoder_update(void *p_data, godot_real p_delta) {
+godot_pool_byte_array *godot_videodecoder_update(void *p_data, godot_real p_delta) {
 	videodecoder_data_struct *data = (videodecoder_data_struct *)p_data;
 
 	do {
 		if (av_read_frame(data->format_ctx, &data->packet) < 0) {
+			printf("ERR NO READ FRAME. %d", __LINE__);
 			return NULL;
 		}
 	} while (data->packet.stream_index != data->videostream_idx);
@@ -424,14 +426,12 @@ godot_object *godot_videodecoder_update(void *p_data, godot_real p_delta) {
 
 	printf("Go for image\n");
 
-	godot_object *img = NULL;
 	_unwrap(&data->unwrapped_frame, data->frame_rgb, data->codec_ctx->width, data->codec_ctx->height);
-	img = videodecoder_api->godot_videodecoder_create_image(&data->unwrapped_frame, data->codec_ctx->width, data->codec_ctx->height);
 	av_packet_unref(&data->packet);
 	// DEBUG
 	printf("update()\n");
 
-	return img;
+	return &data->unwrapped_frame;
 }
 
 /* ---------------------- TODO ------------------------- */
@@ -440,12 +440,17 @@ godot_real godot_videodecoder_get_playback_position(const void *p_data) {
 	videodecoder_data_struct *data = (videodecoder_data_struct *)p_data;
 	// DEBUG
 	printf("get_playback_position()\n");
-	// DEBUG
-	return 0;
+
+	if (data->frame_yuv == NULL) {
+		return 0;
+	}
+	return data->frame_yuv->pts / (godot_real)AV_TIME_BASE;
 }
 
 void godot_videodecoder_seek(void *p_data, godot_real p_time) {
 	videodecoder_data_struct *data = (videodecoder_data_struct *)p_data;
+
+	av_seek_frame(data->format_ctx, data->videostream_idx, (int64_t)(p_time * AV_TIME_BASE), SEEK_SET);
 	// DEBUG
 	printf("seek()\n");
 	// DEBUG
