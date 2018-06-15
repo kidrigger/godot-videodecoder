@@ -15,8 +15,8 @@ typedef struct videodecoder_data_struct {
 	AVFormatContext *format_ctx; // CLEANUP
 	godot_bool input_open;
 	int videostream_idx;
-	AVCodecContext *codec_ctx; // CLEANUP
-	godot_bool codec_open;
+	AVCodecContext *vcodec_ctx; // CLEANUP
+	godot_bool vcodec_open;
 	AVFrame *frame_yuv; // CLEANUP
 	AVFrame *frame_rgb; // CLEANUP
 	struct SwsContext *sws_ctx; // CLEANUP
@@ -25,6 +25,10 @@ typedef struct videodecoder_data_struct {
 	godot_pool_byte_array unwrapped_frame;
 	AVPacket packet;
 	godot_real time;
+
+	int audiostream_idx;
+	AVCodecContext *acodec_ctx;
+	godot_bool acodec_open;
 
 } videodecoder_data_struct;
 
@@ -61,15 +65,26 @@ static void _cleanup(videodecoder_data_struct *data) {
 		data->frame_buffer_size = 0;
 	}
 
-	if (data->codec_ctx != NULL) {
+	if (data->vcodec_ctx != NULL) {
 
-		if (data->codec_open) {
+		if (data->vcodec_open) {
 
-			avcodec_close(data->codec_ctx);
-			data->codec_open = GODOT_FALSE;
+			avcodec_close(data->vcodec_ctx);
+			data->vcodec_open = GODOT_FALSE;
 		}
-		avcodec_free_context(&data->codec_ctx);
-		data->codec_ctx = NULL;
+		avcodec_free_context(&data->vcodec_ctx);
+		data->vcodec_ctx = NULL;
+	}
+
+	if (data->acodec_ctx != NULL) {
+
+		if (data->acodec_open) {
+
+			avcodec_close(data->acodec_ctx);
+			data->vcodec_open = GODOT_FALSE;
+		}
+		avcodec_free_context(&data->acodec_ctx);
+		data->acodec_ctx = NULL;
 	}
 
 	if (data->format_ctx != NULL) {
@@ -95,7 +110,9 @@ static void _cleanup(videodecoder_data_struct *data) {
 		data->io_buffer = NULL;
 	}
 
-	data->videostream_idx = 0;
+	data->time = 0;
+	data->videostream_idx = -1;
+	data->audiostream_idx = -1;
 }
 
 static void _unwrap(godot_pool_byte_array *dest, AVFrame *frame, int width, int height) {
@@ -162,8 +179,8 @@ void *godot_videodecoder_constructor(godot_object *p_instance) {
 	data->input_open = GODOT_FALSE;
 
 	data->videostream_idx = -1;
-	data->codec_ctx = NULL;
-	data->codec_open = GODOT_FALSE;
+	data->vcodec_ctx = NULL;
+	data->vcodec_open = GODOT_FALSE;
 
 	data->frame_rgb = NULL;
 	data->frame_yuv = NULL;
@@ -171,6 +188,10 @@ void *godot_videodecoder_constructor(godot_object *p_instance) {
 
 	data->frame_buffer = NULL;
 	data->frame_buffer_size = 0;
+
+	data->audiostream_idx = -1;
+	data->acodec_ctx = NULL;
+	data->acodec_open = GODOT_FALSE;
 
 	data->time = 0;
 
@@ -297,13 +318,16 @@ godot_bool godot_videodecoder_open_file(void *p_data, void *file) {
 	}
 
 	data->videostream_idx = -1; // should be -1 anyway, just being paranoid.
+	data->audiostream_idx = -1;
 	// find stream
 	for (int i = 0; i < data->format_ctx->nb_streams; i++) {
 
 		if (data->format_ctx->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
 
 			data->videostream_idx = i;
-			break;
+		} else if (data->format_ctx->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
+
+			data->audiostream_idx = i;
 		}
 	}
 
@@ -314,45 +338,89 @@ godot_bool godot_videodecoder_open_file(void *p_data, void *file) {
 		return GODOT_FALSE;
 	}
 
-	AVCodecParameters *codec_param = data->format_ctx->streams[data->videostream_idx]->codecpar;
-
-	AVCodec *codec = NULL;
-	codec = avcodec_find_decoder(codec_param->codec_id);
-
-	if (codec == NULL) {
+	if (data->audiostream_idx == -1) {
 
 		_cleanup(data);
-		api->godot_print_warning("Decoder not found.", "godot_videodecoder_open_file()", __FILE__, __LINE__);
+		api->godot_print_warning("Audio Stream not found.", "godot_videodecoder_open_file()", __FILE__, __LINE__);
 		return GODOT_FALSE;
 	}
 
-	data->codec_ctx = avcodec_alloc_context3(codec);
+	AVCodecParameters *vcodec_param = data->format_ctx->streams[data->videostream_idx]->codecpar;
+	AVCodecParameters *acodec_param = data->format_ctx->streams[data->audiostream_idx]->codecpar;
 
-	if (data->codec_ctx == NULL) {
+	AVCodec *vcodec = NULL;
+	vcodec = avcodec_find_decoder(vcodec_param->codec_id);
+
+	if (vcodec == NULL) {
 
 		_cleanup(data);
-		api->godot_print_warning("Codec allocation error.", "godot_videodecoder_open_file()", __FILE__, __LINE__);
+		api->godot_print_warning("Videodecoder not found.", "godot_videodecoder_open_file()", __FILE__, __LINE__);
 		return GODOT_FALSE;
 	}
 
-	if (avcodec_parameters_to_context(data->codec_ctx, codec_param) < 0) {
+	AVCodec *acodec = NULL;
+	acodec = avcodec_find_decoder(acodec_param->codec_id);
+
+	if (acodec == NULL) {
 
 		_cleanup(data);
-		api->godot_print_warning("Codec context init error.", "godot_videodecoder_open_file()", __FILE__, __LINE__);
+		api->godot_print_warning("Audiodecoder not found.", "godot_videodecoder_open_file()", __FILE__, __LINE__);
 		return GODOT_FALSE;
 	}
 
-	if (avcodec_open2(data->codec_ctx, codec, NULL) < 0) {
+	data->vcodec_ctx = avcodec_alloc_context3(vcodec);
+
+	if (data->vcodec_ctx == NULL) {
 
 		_cleanup(data);
-		api->godot_print_warning("Codec failed to open.", "godot_videodecoder_open_file()", __FILE__, __LINE__);
+		api->godot_print_warning("Videocodec allocation error.", "godot_videodecoder_open_file()", __FILE__, __LINE__);
 		return GODOT_FALSE;
 	}
-	data->codec_open = GODOT_TRUE;
+
+	if (avcodec_parameters_to_context(data->vcodec_ctx, vcodec_param) < 0) {
+
+		_cleanup(data);
+		api->godot_print_warning("Videocodec context init error.", "godot_videodecoder_open_file()", __FILE__, __LINE__);
+		return GODOT_FALSE;
+	}
+
+	if (avcodec_open2(data->vcodec_ctx, vcodec, NULL) < 0) {
+
+		_cleanup(data);
+		api->godot_print_warning("Videocodec failed to open.", "godot_videodecoder_open_file()", __FILE__, __LINE__);
+		return GODOT_FALSE;
+	}
+	data->vcodec_open = GODOT_TRUE;
+
+	data->acodec_ctx = avcodec_alloc_context3(acodec);
+
+	if (data->acodec_ctx == NULL) {
+
+		_cleanup(data);
+		api->godot_print_warning("Audiocodec allocation error.", "godot_videodecoder_open_file()", __FILE__, __LINE__);
+		return GODOT_FALSE;
+	}
+
+	if (avcodec_parameters_to_context(data->acodec_ctx, acodec_param) < 0) {
+
+		_cleanup(data);
+		api->godot_print_warning("Audiocodec context init error.", "godot_videodecoder_open_file()", __FILE__, __LINE__);
+		return GODOT_FALSE;
+	}
+
+	if (avcodec_open2(data->acodec_ctx, acodec, NULL) < 0) {
+
+		_cleanup(data);
+		api->godot_print_warning("Audiocodec failed to open.", "godot_videodecoder_open_file()", __FILE__, __LINE__);
+		return GODOT_FALSE;
+	}
+	data->acodec_open = GODOT_TRUE;
+
+	printf("Channel count: %i\n", data->acodec_ctx->channels);
 
 	// NOTE: Align of 1 (I think it is for 32 bit alignment.) Doesn't work otherwise
 	data->frame_buffer_size = av_image_get_buffer_size(AV_PIX_FMT_RGB32,
-			data->codec_ctx->width, data->codec_ctx->height, 1);
+			data->vcodec_ctx->width, data->vcodec_ctx->height, 1);
 
 	data->frame_buffer = (uint8_t *)api->godot_alloc(data->frame_buffer_size);
 
@@ -374,8 +442,8 @@ godot_bool godot_videodecoder_open_file(void *p_data, void *file) {
 		return GODOT_FALSE;
 	}
 
-	int width = data->codec_ctx->width;
-	int height = data->codec_ctx->height;
+	int width = data->vcodec_ctx->width;
+	int height = data->vcodec_ctx->height;
 	if (av_image_fill_arrays(data->frame_rgb->data, data->frame_rgb->linesize, data->frame_buffer,
 				AV_PIX_FMT_RGB32, width, height, 1) < 0) {
 
@@ -384,7 +452,7 @@ godot_bool godot_videodecoder_open_file(void *p_data, void *file) {
 		return GODOT_FALSE;
 	}
 
-	data->sws_ctx = sws_getContext(width, height, data->codec_ctx->pix_fmt,
+	data->sws_ctx = sws_getContext(width, height, data->vcodec_ctx->pix_fmt,
 			width, height, AV_PIX_FMT_RGB0, SWS_BILINEAR,
 			NULL, NULL, NULL);
 
@@ -414,7 +482,6 @@ godot_pool_byte_array *godot_videodecoder_update(void *p_data, godot_real p_delt
 	data->time += p_delta;
 
 	if (data->time < _avtime_to_sec(data->frame_yuv->pts)) {
-		printf("Wait\n");
 		return &data->unwrapped_frame;
 	}
 
@@ -424,28 +491,24 @@ godot_pool_byte_array *godot_videodecoder_update(void *p_data, godot_real p_delt
 			return NULL;
 		}
 	} while (data->packet.stream_index != data->videostream_idx);
-	printf("Read frame.\n");
 
 	int x;
 	do {
-		if (avcodec_send_packet(data->codec_ctx, &data->packet) >= 0) {
-			x = avcodec_receive_frame(data->codec_ctx, data->frame_yuv);
+		if (avcodec_send_packet(data->vcodec_ctx, &data->packet) >= 0) {
+			x = avcodec_receive_frame(data->vcodec_ctx, data->frame_yuv);
 			if (x != 0 && x != AVERROR(EAGAIN)) {
 				return NULL;
 			} else if (x == 0) {
 				sws_scale(data->sws_ctx, (uint8_t const *const *)data->frame_yuv->data, data->frame_yuv->linesize, 0,
-						data->codec_ctx->height, data->frame_rgb->data, data->frame_rgb->linesize);
+						data->vcodec_ctx->height, data->frame_rgb->data, data->frame_rgb->linesize);
 			}
 		}
-		printf("EAGAIN\n");
 	} while (x == AVERROR(EAGAIN));
 
-	printf("Go for image\n");
-
-	_unwrap(&data->unwrapped_frame, data->frame_rgb, data->codec_ctx->width, data->codec_ctx->height);
+	_unwrap(&data->unwrapped_frame, data->frame_rgb, data->vcodec_ctx->width, data->vcodec_ctx->height);
 	av_packet_unref(&data->packet);
-	// DEBUG
-	printf("update()\n");
+	// DEBUG Yes. This function works. No more polluting the log.
+	// printf("update()\n");
 
 	return &data->unwrapped_frame;
 }
@@ -506,7 +569,7 @@ godot_int godot_videodecoder_get_mix_rate(const void *p_data) {
 godot_vector2 godot_videodecoder_get_size(const void *p_data) {
 	videodecoder_data_struct *data = (videodecoder_data_struct *)p_data;
 	godot_vector2 vec;
-	api->godot_vector2_new(&vec, data->codec_ctx->width, data->codec_ctx->height);
+	api->godot_vector2_new(&vec, data->vcodec_ctx->width, data->vcodec_ctx->height);
 	return vec;
 }
 
