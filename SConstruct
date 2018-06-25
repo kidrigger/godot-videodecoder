@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 
 opts = Variables()
 
@@ -19,6 +20,7 @@ env.Append(LIBPATH=['#test/addons/bin/osx/lib'])
 env.Append(LIBS=['avformat'])
 env.Append(LIBS=['avutil'])
 env.Append(LIBS=['swscale'])
+env.Append(LIBS=['swresample'])
 
 sources = ['#src/gdnative_videodecoder.c']
 

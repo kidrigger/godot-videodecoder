@@ -4,8 +4,12 @@
 #include <libavformat/avformat.h>
 #include <libavutil/avutil.h>
 #include <libavutil/imgutils.h>
+#include <libavutil/opt.h>
+#include <libswresample/swresample.h>
 #include <libswscale/swscale.h>
 #include <stdint.h>
+
+#include "packet_queue.h"
 
 typedef struct videodecoder_data_struct {
 
@@ -29,10 +33,23 @@ typedef struct videodecoder_data_struct {
 	int audiostream_idx;
 	AVCodecContext *acodec_ctx;
 	godot_bool acodec_open;
+	AVFrame *audio_frame;
+	GDNativeAudioMixCallback mix_callback;
+	void *mix_udata;
+
+	int audio_to_send;
+	float *audio_buffer; // CLEANUP
+	int audio_buffer_pos;
+
+	SwrContext *swr_ctx;
+
+	PacketQueue *packet_queue;
+	bool packet_queue_alloc;
 
 } videodecoder_data_struct;
 
 const godot_int IO_BUFFER_SIZE = 64 * 1024; // File reading buffer of 64 KiB?
+const godot_int AUDIO_BUFFER_MAX_SIZE = 192000;
 
 const godot_gdnative_core_api_struct *api = NULL;
 const godot_gdnative_ext_nativescript_api_struct *nativescript_api = NULL;
@@ -41,10 +58,21 @@ const godot_gdnative_ext_videodecoder_api_struct *videodecoder_api = NULL;
 // Cleanup should empty the struct to the point where you can open a new file from.
 static void _cleanup(videodecoder_data_struct *data) {
 
+	if (data->packet_queue != NULL) {
+		packet_queue_deinit(data->packet_queue);
+		data->packet_queue = NULL;
+	}
+
 	if (data->sws_ctx != NULL) {
 
 		sws_freeContext(data->sws_ctx);
 		data->sws_ctx = NULL;
+	}
+
+	if (data->audio_frame != NULL) {
+
+		av_frame_unref(data->audio_frame);
+		data->audio_frame = NULL;
 	}
 
 	if (data->frame_rgb != NULL) {
@@ -110,12 +138,25 @@ static void _cleanup(videodecoder_data_struct *data) {
 		data->io_buffer = NULL;
 	}
 
+	if (data->audio_buffer != NULL) {
+
+		api->godot_free(data->audio_buffer);
+		data->audio_buffer = NULL;
+	}
+
+	if (data->swr_ctx != NULL) {
+
+		swr_free(&data->swr_ctx);
+		// swr_ctx sets to null
+		data->swr_ctx = NULL;
+	}
+
 	data->time = 0;
 	data->videostream_idx = -1;
 	data->audiostream_idx = -1;
 }
 
-static void _unwrap(godot_pool_byte_array *dest, AVFrame *frame, int width, int height) {
+static void _unwrap_video_frame(godot_pool_byte_array *dest, AVFrame *frame, int width, int height) {
 
 	int frame_size = width * height * 4;
 	if (api->godot_pool_byte_array_size(dest) != frame_size) {
@@ -130,6 +171,17 @@ static void _unwrap(godot_pool_byte_array *dest, AVFrame *frame, int width, int 
 		write_ptr += width * 4;
 	}
 	api->godot_pool_byte_array_write_access_destroy(write_access);
+}
+
+static int _interleave_audio_frame(float *dest, AVFrame *audio_frame) {
+
+	int count = 0;
+	for (int j = 0; j != audio_frame->nb_samples; j++) {
+		for (int i = 0; i != audio_frame->channels; i++) {
+			dest[count++] = audio_frame->data[i][j];
+		}
+	}
+	return audio_frame->nb_samples;
 }
 
 static inline godot_real _avtime_to_sec(int64_t avtime) {
@@ -192,6 +244,15 @@ void *godot_videodecoder_constructor(godot_object *p_instance) {
 	data->audiostream_idx = -1;
 	data->acodec_ctx = NULL;
 	data->acodec_open = GODOT_FALSE;
+	data->audio_frame = NULL;
+	data->audio_buffer = NULL;
+
+	data->swr_ctx = NULL;
+
+	data->audio_to_send = 0;
+
+	data->packet_queue = NULL;
+	data->packet_queue_alloc = false;
 
 	data->time = 0;
 
@@ -442,6 +503,15 @@ godot_bool godot_videodecoder_open_file(void *p_data, void *file) {
 		return GODOT_FALSE;
 	}
 
+	data->audio_frame = av_frame_alloc();
+
+	if (data->audio_frame == NULL) {
+
+		_cleanup(data);
+		api->godot_print_warning("Frame alloc fail.", "godot_videodecoder_open_file()", __FILE__, __LINE__);
+		return GODOT_FALSE;
+	}
+
 	int width = data->vcodec_ctx->width;
 	int height = data->vcodec_ctx->height;
 	if (av_image_fill_arrays(data->frame_rgb->data, data->frame_rgb->linesize, data->frame_buffer,
@@ -456,7 +526,36 @@ godot_bool godot_videodecoder_open_file(void *p_data, void *file) {
 			width, height, AV_PIX_FMT_RGB0, SWS_BILINEAR,
 			NULL, NULL, NULL);
 
+	if (data->sws_ctx == NULL) {
+
+		_cleanup(data);
+		api->godot_print_warning("Swscale context not created.", "godot_videodecoder_open_file()", __FILE__, __LINE__);
+		return GODOT_FALSE;
+	}
+
+	data->audio_buffer = (float *)api->godot_alloc(AUDIO_BUFFER_MAX_SIZE * sizeof(float));
+
+	if (data->audio_buffer == NULL) {
+
+		_cleanup(data);
+		api->godot_print_warning("Audio buffer alloc failed.", "godot_videodecoder_open_file()", __FILE__, __LINE__);
+		return GODOT_FALSE;
+	}
+
+	data->swr_ctx = swr_alloc();
+	av_opt_set_int(data->swr_ctx, "in_channel_layout", data->acodec_ctx->channel_layout, 0);
+	av_opt_set_int(data->swr_ctx, "out_channel_layout", data->acodec_ctx->channel_layout, 0);
+	av_opt_set_int(data->swr_ctx, "in_sample_rate", data->acodec_ctx->sample_rate, 0);
+	av_opt_set_int(data->swr_ctx, "out_sample_rate", data->acodec_ctx->sample_rate, 0);
+	av_opt_set_sample_fmt(data->swr_ctx, "in_sample_fmt", AV_SAMPLE_FMT_FLTP, 0);
+	av_opt_set_sample_fmt(data->swr_ctx, "out_sample_fmt", AV_SAMPLE_FMT_FLT, 0);
+	swr_init(data->swr_ctx);
+
 	data->time = 0;
+	data->audio_to_send = 0;
+
+	data->packet_queue = packet_queue_init();
+	data->packet_queue_alloc = true;
 
 	return GODOT_TRUE;
 }
@@ -480,40 +579,81 @@ godot_pool_byte_array *godot_videodecoder_update(void *p_data, godot_real p_delt
 	videodecoder_data_struct *data = (videodecoder_data_struct *)p_data;
 
 	data->time += p_delta;
+	bool has_videoframe = false;
 
-	if (data->time < _avtime_to_sec(data->frame_yuv->pts)) {
-		return &data->unwrapped_frame;
-	}
+	while (!has_videoframe) {
+		if (av_read_frame(data->format_ctx, &data->packet) >= 0) {
+			if (data->packet.stream_index == data->videostream_idx) {
+				// Decode Video
+				int x = AVERROR(EAGAIN);
+				while (x == AVERROR(EAGAIN)) {
+					if (avcodec_send_packet(data->vcodec_ctx, &data->packet) >= 0) {
+						x = avcodec_receive_frame(data->vcodec_ctx, data->frame_yuv);
+						if (x != 0 && x != AVERROR(EAGAIN)) {
+							return NULL;
+						} else if (x == 0) {
+							sws_scale(data->sws_ctx, (uint8_t const *const *)data->frame_yuv->data, data->frame_yuv->linesize, 0,
+									data->vcodec_ctx->height, data->frame_rgb->data, data->frame_rgb->linesize);
+						}
+					}
+				}
 
-	do {
-		if (av_read_frame(data->format_ctx, &data->packet) < 0) {
-			printf("ERR NO READ FRAME. %d", __LINE__);
-			return NULL;
-		}
-	} while (data->packet.stream_index != data->videostream_idx);
+				_unwrap_video_frame(&data->unwrapped_frame, data->frame_rgb, data->vcodec_ctx->width, data->vcodec_ctx->height);
+				av_packet_unref(&data->packet);
+				// Stop decoding once a video frame has been found. Present it. TODO: Buffer this.
+				has_videoframe = true;
+			} else if (data->mix_callback && data->packet.stream_index == data->audiostream_idx) {
+				packet_queue_put(data->packet_queue, &data->packet);
 
-	int x;
-	do {
-		if (avcodec_send_packet(data->vcodec_ctx, &data->packet) >= 0) {
-			x = avcodec_receive_frame(data->vcodec_ctx, data->frame_yuv);
-			if (x != 0 && x != AVERROR(EAGAIN)) {
-				return NULL;
-			} else if (x == 0) {
-				sws_scale(data->sws_ctx, (uint8_t const *const *)data->frame_yuv->data, data->frame_yuv->linesize, 0,
-						data->vcodec_ctx->height, data->frame_rgb->data, data->frame_rgb->linesize);
+				// Save to buffer
+				// NOTE: You recieve more than one packet of audio per update frame.
+				// Check terminal output
+
+			} else {
+				av_packet_unref(&data->packet);
 			}
 		}
-	} while (x == AVERROR(EAGAIN));
+	}
 
-	_unwrap(&data->unwrapped_frame, data->frame_rgb, data->vcodec_ctx->width, data->vcodec_ctx->height);
-	av_packet_unref(&data->packet);
+	// Audio sending here.
+
+	bool buffer_full = false;
+
+	while (!buffer_full && data->packet_queue->nb_packets > 0) {
+
+		// No decoded audio in buffer, decode
+		if (data->audio_to_send <= 0) {
+			AVPacket pkt;
+			if (data->packet_queue->nb_packets < 0) {
+				break;
+			}
+			if (!packet_queue_get(data->packet_queue, &pkt)) {
+				break;
+			}
+			int x = AVERROR(EAGAIN);
+			while (x == AVERROR(EAGAIN)) {
+				if (avcodec_send_packet(data->acodec_ctx, &pkt) >= 0) {
+					x = avcodec_receive_frame(data->acodec_ctx, data->audio_frame);
+					if (x == 0) {
+						// got data
+						data->audio_to_send = swr_convert(data->swr_ctx, (uint8_t **)&data->audio_buffer, data->audio_frame->nb_samples, (const uint8_t **)data->audio_frame->extended_data, data->audio_frame->nb_samples);
+					}
+				}
+			}
+		}
+
+		int mixed = data->mix_callback(data->mix_udata, data->audio_buffer, data->audio_to_send);
+		data->audio_to_send -= mixed;
+		// DEBUG
+		printf("Pending audio: %i\tAvailable packets: %i\n", data->audio_to_send, data->packet_queue->nb_packets);
+		buffer_full = data->audio_to_send > 0;
+		// send audio until full
+	}
+
 	// DEBUG Yes. This function works. No more polluting the log.
 	// printf("update()\n");
-
 	return &data->unwrapped_frame;
 }
-
-/* ---------------------- TODO ------------------------- */
 
 godot_real godot_videodecoder_get_playback_position(const void *p_data) {
 	videodecoder_data_struct *data = (videodecoder_data_struct *)p_data;
@@ -528,13 +668,12 @@ godot_real godot_videodecoder_get_playback_position(const void *p_data) {
 
 void godot_videodecoder_seek(void *p_data, godot_real p_time) {
 	videodecoder_data_struct *data = (videodecoder_data_struct *)p_data;
-
-	av_seek_frame(data->format_ctx, data->videostream_idx, (int64_t)(p_time * AV_TIME_BASE), SEEK_SET);
-	data->time = p_time;
 	// DEBUG
 	printf("seek()\n");
 	// DEBUG
 }
+
+/* ---------------------- TODO ------------------------- */
 
 void godot_videodecoder_set_audio_track(void *p_data, godot_int p_audiotrack) {
 	videodecoder_data_struct *data = (videodecoder_data_struct *)p_data;
@@ -543,8 +682,11 @@ void godot_videodecoder_set_audio_track(void *p_data, godot_int p_audiotrack) {
 	// DEBUG
 }
 
-void godot_videodecoder_set_mix_callback(void *p_data, void *p_callback, void *p_userdata) {
+void godot_videodecoder_set_mix_callback(void *p_data, GDNativeAudioMixCallback p_callback, void *p_userdata) {
 	videodecoder_data_struct *data = (videodecoder_data_struct *)p_data;
+
+	data->mix_callback = p_callback;
+	data->mix_udata = p_userdata;
 	// DEBUG
 	printf("set_mix_callback()\n");
 	// DEBUG
@@ -554,6 +696,10 @@ godot_int godot_videodecoder_get_channels(const void *p_data) {
 	videodecoder_data_struct *data = (videodecoder_data_struct *)p_data;
 	// DEBUG
 	printf("get_channels()\n");
+
+	if (data->acodec_ctx != NULL) {
+		return data->acodec_ctx->channels;
+	}
 	// DEBUG
 	return 0;
 }
@@ -562,6 +708,10 @@ godot_int godot_videodecoder_get_mix_rate(const void *p_data) {
 	videodecoder_data_struct *data = (videodecoder_data_struct *)p_data;
 	// DEBUG
 	printf("get_mix_rate()\n");
+
+	if (data->acodec_ctx != NULL) {
+		return data->acodec_ctx->sample_rate;
+	}
 	// DEBUG
 	return 0;
 }
