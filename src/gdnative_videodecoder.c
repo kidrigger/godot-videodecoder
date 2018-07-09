@@ -43,8 +43,8 @@ typedef struct videodecoder_data_struct {
 
 	SwrContext *swr_ctx;
 
-	PacketQueue *packet_queue;
-	bool packet_queue_alloc;
+	PacketQueue *audio_packet_queue;
+	PacketQueue *video_packet_queue;
 
 } videodecoder_data_struct;
 
@@ -58,9 +58,14 @@ const godot_gdnative_ext_videodecoder_api_struct *videodecoder_api = NULL;
 // Cleanup should empty the struct to the point where you can open a new file from.
 static void _cleanup(videodecoder_data_struct *data) {
 
-	if (data->packet_queue != NULL) {
-		packet_queue_deinit(data->packet_queue);
-		data->packet_queue = NULL;
+	if (data->audio_packet_queue != NULL) {
+		packet_queue_deinit(data->audio_packet_queue);
+		data->audio_packet_queue = NULL;
+	}
+
+	if (data->video_packet_queue != NULL) {
+		packet_queue_deinit(data->video_packet_queue);
+		data->video_packet_queue = NULL;
 	}
 
 	if (data->sws_ctx != NULL) {
@@ -175,13 +180,24 @@ static void _unwrap_video_frame(godot_pool_byte_array *dest, AVFrame *frame, int
 
 static int _interleave_audio_frame(float *dest, AVFrame *audio_frame) {
 
+	float **audio_frame_data = (float **)audio_frame->data;
 	int count = 0;
 	for (int j = 0; j != audio_frame->nb_samples; j++) {
 		for (int i = 0; i != audio_frame->channels; i++) {
-			dest[count++] = audio_frame->data[i][j];
+			dest[count++] = audio_frame_data[i][j];
 		}
 	}
 	return audio_frame->nb_samples;
+}
+
+static bool _decode_packet(AVFrame *dest, AVPacket *pkt, AVCodecContext *ctx) {
+	int x = AVERROR(EAGAIN);
+	while (x == AVERROR(EAGAIN)) {
+		if (avcodec_send_packet(ctx, pkt) >= 0) {
+			x = avcodec_receive_frame(ctx, dest);
+		}
+	}
+	return !x;
 }
 
 static inline godot_real _avtime_to_sec(int64_t avtime) {
@@ -251,8 +267,8 @@ void *godot_videodecoder_constructor(godot_object *p_instance) {
 
 	data->audio_to_send = 0;
 
-	data->packet_queue = NULL;
-	data->packet_queue_alloc = false;
+	data->audio_packet_queue = NULL;
+	data->video_packet_queue = NULL;
 
 	data->time = 0;
 
@@ -554,8 +570,8 @@ godot_bool godot_videodecoder_open_file(void *p_data, void *file) {
 	data->time = 0;
 	data->audio_to_send = 0;
 
-	data->packet_queue = packet_queue_init();
-	data->packet_queue_alloc = true;
+	data->audio_packet_queue = packet_queue_init();
+	data->video_packet_queue = packet_queue_init();
 
 	return GODOT_TRUE;
 }
@@ -584,26 +600,13 @@ godot_pool_byte_array *godot_videodecoder_update(void *p_data, godot_real p_delt
 	while (!has_videoframe) {
 		if (av_read_frame(data->format_ctx, &data->packet) >= 0) {
 			if (data->packet.stream_index == data->videostream_idx) {
+				packet_queue_put(data->video_packet_queue, &data->packet);
 				// Decode Video
-				int x = AVERROR(EAGAIN);
-				while (x == AVERROR(EAGAIN)) {
-					if (avcodec_send_packet(data->vcodec_ctx, &data->packet) >= 0) {
-						x = avcodec_receive_frame(data->vcodec_ctx, data->frame_yuv);
-						if (x != 0 && x != AVERROR(EAGAIN)) {
-							return NULL;
-						} else if (x == 0) {
-							sws_scale(data->sws_ctx, (uint8_t const *const *)data->frame_yuv->data, data->frame_yuv->linesize, 0,
-									data->vcodec_ctx->height, data->frame_rgb->data, data->frame_rgb->linesize);
-						}
-					}
-				}
 
-				_unwrap_video_frame(&data->unwrapped_frame, data->frame_rgb, data->vcodec_ctx->width, data->vcodec_ctx->height);
-				av_packet_unref(&data->packet);
 				// Stop decoding once a video frame has been found. Present it. TODO: Buffer this.
 				has_videoframe = true;
 			} else if (data->mix_callback && data->packet.stream_index == data->audiostream_idx) {
-				packet_queue_put(data->packet_queue, &data->packet);
+				packet_queue_put(data->audio_packet_queue, &data->packet);
 
 				// Save to buffer
 				// NOTE: You recieve more than one packet of audio per update frame.
@@ -619,35 +622,40 @@ godot_pool_byte_array *godot_videodecoder_update(void *p_data, godot_real p_delt
 
 	bool buffer_full = false;
 
-	while (!buffer_full && data->packet_queue->nb_packets > 0) {
+	while (!buffer_full && data->audio_packet_queue->nb_packets > 0) {
 
 		// No decoded audio in buffer, decode
 		if (data->audio_to_send <= 0) {
 			AVPacket pkt;
-			if (data->packet_queue->nb_packets < 0) {
+			if (!packet_queue_get(data->audio_packet_queue, &pkt)) {
 				break;
 			}
-			if (!packet_queue_get(data->packet_queue, &pkt)) {
-				break;
-			}
-			int x = AVERROR(EAGAIN);
-			while (x == AVERROR(EAGAIN)) {
-				if (avcodec_send_packet(data->acodec_ctx, &pkt) >= 0) {
-					x = avcodec_receive_frame(data->acodec_ctx, data->audio_frame);
-					if (x == 0) {
-						// got data
-						data->audio_to_send = swr_convert(data->swr_ctx, (uint8_t **)&data->audio_buffer, data->audio_frame->nb_samples, (const uint8_t **)data->audio_frame->extended_data, data->audio_frame->nb_samples);
-					}
-				}
-			}
+			_decode_packet(data->audio_frame, &pkt, data->acodec_ctx);
+			data->audio_to_send = _interleave_audio_frame(data->audio_buffer, data->audio_frame);
+			// data->audio_to_send = swr_convert(data->swr_ctx, (uint8_t **)&data->audio_buffer, data->audio_frame->nb_samples, (const uint8_t **)data->audio_frame->extended_data, data->audio_frame->nb_samples);
+			data->audio_buffer_pos = 0;
 		}
 
-		int mixed = data->mix_callback(data->mix_udata, data->audio_buffer, data->audio_to_send);
+		int mixed = data->mix_callback(data->mix_udata, data->audio_buffer + data->audio_buffer_pos * data->acodec_ctx->channels, data->audio_to_send);
 		data->audio_to_send -= mixed;
+		data->audio_buffer_pos += mixed;
 		// DEBUG
-		printf("Pending audio: %i\tAvailable packets: %i\n", data->audio_to_send, data->packet_queue->nb_packets);
+		printf("Pending audio: %i\tAvailable packets: %i\n", data->audio_to_send, data->audio_packet_queue->nb_packets);
 		buffer_full = data->audio_to_send > 0;
 		// send audio until full
+	}
+
+	{
+		AVPacket pkt;
+
+		packet_queue_get(data->video_packet_queue, &pkt);
+		_decode_packet(data->frame_yuv, &pkt, data->vcodec_ctx);
+
+		sws_scale(data->sws_ctx, (uint8_t const *const *)data->frame_yuv->data, data->frame_yuv->linesize, 0,
+				data->vcodec_ctx->height, data->frame_rgb->data, data->frame_rgb->linesize);
+
+		_unwrap_video_frame(&data->unwrapped_frame, data->frame_rgb, data->vcodec_ctx->width, data->vcodec_ctx->height);
+		av_packet_unref(&pkt);
 	}
 
 	// DEBUG Yes. This function works. No more polluting the log.
