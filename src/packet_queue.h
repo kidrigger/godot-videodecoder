@@ -69,7 +69,8 @@ int packet_queue_get(PacketQueue *q, AVPacket *pkt) {
 void packet_queue_deinit(PacketQueue *q) {
 	AVPacket *pt;
 	while (packet_queue_get(q, pt)) {
-		av_packet_unref(pt);
+		if (pt->data)
+			av_packet_unref(pt);
 	}
 	api->godot_free(q);
 }
