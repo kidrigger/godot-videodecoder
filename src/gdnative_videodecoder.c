@@ -567,7 +567,7 @@ godot_bool godot_videodecoder_open_file(void *p_data, void *file) {
 	av_opt_set_int(data->swr_ctx, "in_channel_layout", data->acodec_ctx->channel_layout, 0);
 	av_opt_set_int(data->swr_ctx, "out_channel_layout", data->acodec_ctx->channel_layout, 0);
 	av_opt_set_int(data->swr_ctx, "in_sample_rate", data->acodec_ctx->sample_rate, 0);
-	av_opt_set_int(data->swr_ctx, "out_sample_rate", data->acodec_ctx->sample_rate, 0);
+	av_opt_set_int(data->swr_ctx, "out_sample_rate", 22050, 0);
 	av_opt_set_sample_fmt(data->swr_ctx, "in_sample_fmt", AV_SAMPLE_FMT_FLTP, 0);
 	av_opt_set_sample_fmt(data->swr_ctx, "out_sample_fmt", AV_SAMPLE_FMT_FLT, 0);
 	swr_init(data->swr_ctx);
@@ -601,14 +601,16 @@ void godot_videodecoder_update(void *p_data, godot_real p_delta) {
 
 	data->time += p_delta;
 
-	AVPacket pkt;
-	while (av_read_frame(data->format_ctx, &pkt) >= 0) {
-		if (pkt.stream_index == data->videostream_idx) {
-			packet_queue_put(data->video_packet_queue, &pkt);
-		} else if (data->mix_callback && pkt.stream_index == data->audiostream_idx) {
-			packet_queue_put(data->audio_packet_queue, &pkt);
-		} else {
-			av_packet_unref(&pkt);
+	while (data->video_packet_queue->nb_packets < 3) {
+		AVPacket pkt;
+		if (av_read_frame(data->format_ctx, &pkt) >= 0) {
+			if (pkt.stream_index == data->videostream_idx) {
+				packet_queue_put(data->video_packet_queue, &pkt);
+			} else if (data->mix_callback && pkt.stream_index == data->audiostream_idx) {
+				packet_queue_put(data->audio_packet_queue, &pkt);
+			} else {
+				av_packet_unref(&pkt);
+			}
 		}
 	}
 
@@ -640,20 +642,24 @@ godot_int godot_videodecoder_get_audio(void *p_data, float *pcm, int num_samples
 	videodecoder_data_struct *data = (videodecoder_data_struct *)p_data;
 
 	const int total_to_send = num_samples;
+	int pcm_offset = 0;
 
 	int to_send = (num_samples < data->num_decoded_samples) ? num_samples : data->num_decoded_samples;
 	if (to_send > 0) {
 		memcpy(pcm, data->audio_buffer + data->acodec_ctx->channels * data->audio_buffer_pos, sizeof(float) * to_send * data->acodec_ctx->channels);
+		// printf("Copy 0:%i from %i:%i\n", to_send, data->audio_buffer_pos, data->audio_buffer_pos + to_send);
+		pcm_offset += to_send;
+		num_samples -= to_send;
+		data->num_decoded_samples -= to_send;
+		data->audio_buffer_pos += to_send;
 	}
-	num_samples -= to_send;
-	data->num_decoded_samples -= to_send;
-	data->audio_buffer_pos += to_send;
 
 	while (num_samples > 0) {
 		if (data->num_decoded_samples <= 0) {
 			AVPacket pkt;
 			if (packet_queue_get(data->audio_packet_queue, &pkt) && _decode_packet(data->audio_frame, &pkt, data->acodec_ctx)) {
-				data->num_decoded_samples = _interleave_audio_frame(data->audio_buffer, data->audio_frame);
+				data->num_decoded_samples = swr_convert(data->swr_ctx, (uint8_t **)&data->audio_buffer, data->audio_frame->nb_samples, (const uint8_t **)data->audio_frame->extended_data, data->audio_frame->nb_samples);
+				// data->num_decoded_samples = _interleave_audio_frame(data->audio_buffer, data->audio_frame);
 				data->audio_buffer_pos = 0;
 			} else {
 				return total_to_send - num_samples;
@@ -662,12 +668,15 @@ godot_int godot_videodecoder_get_audio(void *p_data, float *pcm, int num_samples
 
 		to_send = (num_samples < data->num_decoded_samples) ? num_samples : data->num_decoded_samples;
 		if (to_send > 0) {
-			memcpy(pcm, data->audio_buffer + data->acodec_ctx->channels * data->audio_buffer_pos, sizeof(float) * to_send * data->acodec_ctx->channels);
+			memcpy(pcm + pcm_offset * data->acodec_ctx->channels, data->audio_buffer + data->acodec_ctx->channels * data->audio_buffer_pos, sizeof(float) * to_send * data->acodec_ctx->channels);
+			// printf("Copy %i:%i from %i:%i\n", pcm_offset, pcm_offset + to_send, data->audio_buffer_pos, data->audio_buffer_pos + to_send);
+			pcm_offset += to_send;
+			num_samples -= to_send;
+			data->num_decoded_samples -= to_send;
+			data->audio_buffer_pos += to_send;
 		}
-		num_samples -= to_send;
-		data->num_decoded_samples -= to_send;
-		data->audio_buffer_pos += to_send;
 	}
+	// printf("\n");
 
 	return total_to_send;
 }
@@ -717,7 +726,7 @@ godot_int godot_videodecoder_get_mix_rate(const void *p_data) {
 	printf("get_mix_rate()\n");
 
 	if (data->acodec_ctx != NULL) {
-		return data->acodec_ctx->sample_rate;
+		return 22050;
 	}
 	// DEBUG
 	return 0;
