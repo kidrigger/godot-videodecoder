@@ -211,6 +211,8 @@ static inline godot_real _avtime_to_sec(int64_t avtime) {
 extern const godot_videodecoder_interface_gdnative plugin_interface;
 
 static char *plugin_name = "test_plugin";
+static const int num_supported_ext = 2;
+static char *supported_ext[num_supported_ext] = { "mp4", "mov" };
 
 void GDN_EXPORT godot_gdnative_init(godot_gdnative_init_options *p_options) {
 	api = p_options->api_struct;
@@ -297,6 +299,11 @@ void godot_videodecoder_destructor(void *p_data) {
 
 	// DEBUG
 	printf("dtor()\n");
+}
+
+char **godot_videodecoder_get_supported_ext(int *p_count) {
+	*p_count = num_supported_ext;
+	return supported_ext;
 }
 
 char *godot_videodecoder_get_plugin_name(void) {
@@ -578,6 +585,8 @@ godot_bool godot_videodecoder_open_file(void *p_data, void *file) {
 	data->audio_packet_queue = packet_queue_init();
 	data->video_packet_queue = packet_queue_init();
 
+	printf("AUDIO: %i\tVIDEO: %i\n", data->audiostream_idx, data->videostream_idx);
+
 	return GODOT_TRUE;
 }
 
@@ -613,6 +622,8 @@ void godot_videodecoder_update(void *p_data, godot_real p_delta) {
 			}
 		}
 	}
+
+	printf("A: %i\t", data->audio_packet_queue->nb_packets);
 
 	// DEBUG Yes. This function works. No more polluting the log.
 	// printf("update()\n");
@@ -676,7 +687,6 @@ godot_int godot_videodecoder_get_audio(void *p_data, float *pcm, int num_samples
 			data->audio_buffer_pos += to_send;
 		}
 	}
-	// printf("\n");
 
 	return total_to_send;
 }
@@ -743,6 +753,7 @@ const godot_videodecoder_interface_gdnative plugin_interface = {
 	godot_videodecoder_constructor,
 	godot_videodecoder_destructor,
 	godot_videodecoder_get_plugin_name,
+	godot_videodecoder_get_supported_ext,
 	godot_videodecoder_open_file,
 	godot_videodecoder_get_length,
 	godot_videodecoder_get_playback_position,
