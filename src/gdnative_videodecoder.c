@@ -585,7 +585,7 @@ godot_bool godot_videodecoder_open_file(void *p_data, void *file) {
 	data->audio_packet_queue = packet_queue_init();
 	data->video_packet_queue = packet_queue_init();
 
-	printf("AUDIO: %i\tVIDEO: %i\n", data->audiostream_idx, data->videostream_idx);
+	// printf("AUDIO: %i\tVIDEO: %i\n", data->audiostream_idx, data->videostream_idx);
 
 	return GODOT_TRUE;
 }
@@ -623,7 +623,7 @@ void godot_videodecoder_update(void *p_data, godot_real p_delta) {
 		}
 	}
 
-	printf("A: %i\t", data->audio_packet_queue->nb_packets);
+	// printf("A: %i\t", data->audio_packet_queue->nb_packets);
 
 	// DEBUG Yes. This function works. No more polluting the log.
 	// printf("update()\n");
@@ -750,6 +750,8 @@ godot_vector2 godot_videodecoder_get_texture_size(const void *p_data) {
 }
 
 const godot_videodecoder_interface_gdnative plugin_interface = {
+	GODOTAV_API_MAJOR, GODOTAV_API_MINOR,
+	NULL,
 	godot_videodecoder_constructor,
 	godot_videodecoder_destructor,
 	godot_videodecoder_get_plugin_name,

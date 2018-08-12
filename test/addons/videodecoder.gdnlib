@@ -13,6 +13,6 @@ OSX.64="res://addons/bin/osx/libgdnative_videodecoder.dylib"
 
 [dependencies]
 
-X11.64=[]
-Windows=[]
-OSX.64=["res://addons/bin/osx/lib/libavformat.dylib", "res://addons/bin/osx/lib/libavutil.56.dylib", "res://addons/bin/osx/lib/libavcodec.dylib", "res://addons/bin/osx/lib/libswscale.dylib"]
+X11.64=[  ]
+Windows=[  ]
+OSX.64=[ "res://addons/bin/osx/lib/libavformat.dylib", "res://addons/bin/osx/lib/libavutil.56.dylib", "res://addons/bin/osx/lib/libavcodec.dylib", "res://addons/bin/osx/lib/libswscale.dylib" ]

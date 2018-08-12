@@ -1,15 +1,16 @@
-[gd_scene load_steps=3 format=2]
+[gd_scene load_steps=2 format=2]
 
-[ext_resource path="res://samples/big_buck_bunny.mov" type="VideoStream" id=1]
-[ext_resource path="res://World.gd" type="Script" id=2]
+[ext_resource path="res://samples/big_buck_bunny.mp4" type="VideoStream" id=1]
 
-[node name="VideoPlayer" type="VideoPlayer" index="0"]
+[node name="Node2D" type="Node2D" index="0"]
+
+[node name="VideoPlayer" type="VideoPlayer" parent="." index="0"]
 anchor_left = 0.0
 anchor_top = 0.0
 anchor_right = 0.0
 anchor_bottom = 0.0
-margin_right = 509.0
-margin_bottom = 328.0
+margin_right = 429.0
+margin_bottom = 306.0
 rect_pivot_offset = Vector2( 0, 0 )
 rect_clip_content = false
 mouse_filter = 0
@@ -24,7 +25,4 @@ paused = false
 expand = true
 buffering_msec = 500
 bus = "Master"
-script = ExtResource( 2 )
-_sections_unfolded = [ "stream" ]
 
-[connection signal="finished" from="." to="." method="_on_VideoPlayer_finished"]
