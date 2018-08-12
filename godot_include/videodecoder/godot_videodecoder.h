@@ -37,8 +37,6 @@
 extern "C" {
 #endif
 
-typedef int (*GDNativeAudioMixCallback)(void *, const float *, int);
-
 #define GODOTAV_API_MAJOR 0
 #define GODOTAV_API_MINOR 1
 
@@ -48,8 +46,8 @@ typedef struct
 	void *next;
 	void *(*constructor)(godot_object *);
 	void (*destructor)(void *);
-	char *(*get_plugin_name)(void);
-	char **(*get_supported_extensions)(int *count);
+	const char *(*get_plugin_name)(void);
+	const char **(*get_supported_extensions)(int *count);
 	godot_bool (*open_file)(void *, void *); // data struct, and a FileAccess pointer
 	godot_real (*get_length)(const void *);
 	godot_real (*get_playback_position)(const void *);

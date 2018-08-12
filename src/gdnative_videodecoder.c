@@ -36,7 +36,6 @@ typedef struct videodecoder_data_struct {
 	AVCodecContext *acodec_ctx;
 	godot_bool acodec_open;
 	AVFrame *audio_frame;
-	GDNativeAudioMixCallback mix_callback;
 	void *mix_udata;
 
 	int num_decoded_samples;
@@ -302,12 +301,12 @@ void godot_videodecoder_destructor(void *p_data) {
 	printf("dtor()\n");
 }
 
-char **godot_videodecoder_get_supported_ext(int *p_count) {
+const char **godot_videodecoder_get_supported_ext(int *p_count) {
 	*p_count = num_supported_ext;
 	return supported_ext;
 }
 
-char *godot_videodecoder_get_plugin_name(void) {
+const char *godot_videodecoder_get_plugin_name(void) {
 
 	return plugin_name;
 }
@@ -616,7 +615,7 @@ void godot_videodecoder_update(void *p_data, godot_real p_delta) {
 		if (av_read_frame(data->format_ctx, &pkt) >= 0) {
 			if (pkt.stream_index == data->videostream_idx) {
 				packet_queue_put(data->video_packet_queue, &pkt);
-			} else if (data->mix_callback && pkt.stream_index == data->audiostream_idx) {
+			} else if (pkt.stream_index == data->audiostream_idx) {
 				packet_queue_put(data->audio_packet_queue, &pkt);
 			} else {
 				av_packet_unref(&pkt);
