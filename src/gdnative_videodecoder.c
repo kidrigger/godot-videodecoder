@@ -210,9 +210,9 @@ static inline godot_real _avtime_to_sec(int64_t avtime) {
 
 extern const godot_videodecoder_interface_gdnative plugin_interface;
 
-static char *plugin_name = "test_plugin";
+static const char *plugin_name = "test_plugin";
 static const int num_supported_ext = 2;
-static char *supported_ext[num_supported_ext] = { "mp4", "mov" };
+static const char *supported_ext[] = { "mp4", "mov" };
 
 void GDN_EXPORT godot_gdnative_init(godot_gdnative_init_options *p_options) {
 	api = p_options->api_struct;
@@ -286,6 +286,7 @@ void *godot_videodecoder_constructor(godot_object *p_instance) {
 
 	return data;
 }
+
 void godot_videodecoder_destructor(void *p_data) {
 
 	videodecoder_data_struct *data = (videodecoder_data_struct *)p_data;
