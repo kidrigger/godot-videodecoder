@@ -620,6 +620,8 @@ void godot_videodecoder_update(void *p_data, godot_real p_delta) {
 			} else {
 				av_packet_unref(&pkt);
 			}
+		} else {
+			break;
 		}
 	}
 
