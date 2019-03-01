@@ -4,7 +4,7 @@ opts = Variables()
 
 opts.Add(BoolVariable('test','build to test',True))
 opts.Add(BoolVariable('debug','debug build',True))
-opts.Add(EnumVariable('platform','can be osx, linux (x11) or windows (win64)','osx',('osx','x11','win64'),
+opts.Add(EnumVariable('platform','can be osx, linux (x11) or windows (win64)','',('osx','x11','win64'),
                                         map={'linux':'x11','windows':'win64'}))
 opts.Add(BoolVariable('link_static','', False))
 
@@ -12,7 +12,12 @@ env = Environment(variables=opts)
 
 if env['debug']:
     env.Append(CPPFLAGS=['-g'])
-env.Append(LINKFLAG='-Wl,-rpath,./lib')
+
+if env['platform'] == 'osx':
+    # build everything, rename
+    pass
+elif env['platform'] == 'x11':
+    env.Append(RPATH=env.Literal('\$$ORIGIN/lib'))
 
 env.Append(CPPPATH=['#test/addons/bin/'+env['platform']+'/include'])
 env.Append(CPPPATH=['#godot_include'])
