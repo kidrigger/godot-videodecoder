@@ -10,7 +10,7 @@ using the [FFmpeg](https://ffmpeg.org) library for codecs.
 1. Clone the repository
 
 ```
-git clone https://github.com/KidRigger/godot-videodecoder.git godot-videorecorder
+git clone https://github.com/KidRigger/godot-videodecoder.git godot-videodecoder
 ```
 
 2. Clone FFmpeg in another folder.
