@@ -12,7 +12,7 @@ env = Environment(variables=opts)
 
 if env['debug']:
     env.Append(CPPFLAGS=['-g'])
-env.Append(LINKFLAG='-Wl,-rpath,./lib')
+env.Append(RPATH=env.Literal('\\$$ORIGIN/lib'))
 
 env.Append(CPPPATH=['#test/addons/bin/'+env['platform']+'/include'])
 env.Append(CPPPATH=['#godot_include'])
