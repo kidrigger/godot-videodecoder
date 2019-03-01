@@ -19,8 +19,8 @@ git clone https://github.com/KidRigger/godot-videodecoder.git godot-videorecorde
 git clone git://source.ffmpeg.org/ffmpeg.git ffmpeg
 ```
 
-3. Switch ffmpeg to branch `release/4.0`
-   (Currently only tested with 4.0, feel free to test with 4.1)
+3. Switch ffmpeg to branch `release/4.1`
+   (Tested with both `release/4.0` and `release/4.1`.)
 
 4. Configure FFmpeg using the `configure` tool in the ffmpeg repository.
    Use the following flags. (Or as per requirement) [Needs OpenCL].
