@@ -3,6 +3,7 @@
 *.o
 *.os
 bin/
+thirdparty/
 .import/
 .DS_Store
 .test/addons/bin

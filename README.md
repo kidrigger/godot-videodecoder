@@ -33,7 +33,7 @@ git clone git://source.ffmpeg.org/ffmpeg.git ffmpeg
 --enable-libmp3lame --enable-libtheora \
 --enable-libvorbis --enable-libvpx --enable-libwebp \
 --enable-opencl --enable-opengl --disable-debug \
---prefix=<path-to-videodecoder-folder>/godot-videodecoder/test/addons/bin/osx
+--prefix=<path-to-videodecoder-folder>/godot-videodecoder/thirdparty
 ```
 
     - Linux:
@@ -43,7 +43,7 @@ git clone git://source.ffmpeg.org/ffmpeg.git ffmpeg
 --enable-libmp3lame --enable-libtheora \
 --enable-libvorbis --enable-libvpx --enable-libwebp \
 --enable-opencl --enable-opengl --disable-debug \
---prefix=<path-to-videodecoder-folder>/godot-videodecoder/test/addons/bin/x11
+--prefix=<path-to-videodecoder-folder>/godot-videodecoder/thirdparty
 ```
 
     - Windows [Untested]:
@@ -53,7 +53,7 @@ configure --enable-shared --enable-version3 --disable-programs \
 --enable-libmp3lame --enable-libtheora \
 --enable-libvorbis --enable-libvpx --enable-libwebp \
 --enable-opencl --enable-opengl --disable-debug \
---prefix=<path-to-videodecoder-folder>/godot-videodecoder/test/addons/bin/win64
+--prefix=<path-to-videodecoder-folder>/godot-videodecoder/thirdparty
 ```
 
 5. Run `make` and then `make install`.
