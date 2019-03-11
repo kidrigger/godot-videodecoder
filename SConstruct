@@ -35,6 +35,7 @@ if env['platform'] == 'osx':
 
 env.Append(LIBPATH=[output_path])
 env.Append(LIBS=['avformat'])
+env.Append(LIBS=['avcodec'])
 env.Append(LIBS=['avutil'])
 env.Append(LIBS=['swscale'])
 env.Append(LIBS=['swresample'])
