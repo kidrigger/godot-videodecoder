@@ -738,7 +738,7 @@ godot_int godot_videodecoder_get_mix_rate(const void *p_data) {
 	printf("get_mix_rate()\n");
 
 	if (data->acodec_ctx != NULL) {
-		return 22050;
+		return data->acodec_ctx->sample_rate;
 	}
 	// DEBUG
 	return 0;
