@@ -40,7 +40,7 @@ env.Append(LIBS=['avutil'])
 env.Append(LIBS=['swscale'])
 env.Append(LIBS=['swresample'])
 
-sources = ['#src/gdnative_videodecoder.c']
+sources = list(map(lambda x: '#'+x, glob('src/*.c')))
 
 output_dylib = env.SharedLibrary(output_path+'gdnative_videodecoder',sources)
 if env['platform'] == 'osx':
