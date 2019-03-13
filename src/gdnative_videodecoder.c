@@ -341,14 +341,11 @@ godot_bool godot_videodecoder_open_file(void *p_data, void *file) {
 	videodecoder_api->godot_videodecoder_file_seek(file, 0, SEEK_SET);
 
 	// Determine input format
-	// HACK: Avoids segfault, needs to be above probe_data. Minimum size of 5 bytes.
-	// Probably alignment.
-	uint64_t hack;
-	AVProbeData probe_data; // NOTE: Size of probe_data is 32 bytes.
-
+	AVProbeData probe_data;
 	probe_data.buf = data->io_buffer;
 	probe_data.buf_size = read_bytes;
 	probe_data.filename = "";
+	probe_data.mime_type = "";
 
 	AVInputFormat *input_format = NULL;
 	input_format = av_probe_input_format(&probe_data, 1);
@@ -697,13 +694,13 @@ godot_real godot_videodecoder_get_playback_position(const void *p_data) {
 	videodecoder_data_struct *data = (videodecoder_data_struct *)p_data;
 	// DEBUG
 	// printf("get_playback_position()\n");
-    
-    if (data->format_ctx) {
-        double pts = (double)data->frame_yuv->pts;
-        pts *= av_q2d(data->format_ctx->streams[data->videostream_idx]->time_base);
-	    return (godot_real)pts;
-    }
-    return (godot_real)0;
+
+	if (data->format_ctx) {
+		double pts = (double)data->frame_yuv->pts;
+		pts *= av_q2d(data->format_ctx->streams[data->videostream_idx]->time_base);
+		return (godot_real)pts;
+	}
+	return (godot_real)0;
 }
 
 void godot_videodecoder_seek(void *p_data, godot_real p_time) {
@@ -749,10 +746,10 @@ godot_int godot_videodecoder_get_mix_rate(const void *p_data) {
 godot_vector2 godot_videodecoder_get_texture_size(const void *p_data) {
 	videodecoder_data_struct *data = (videodecoder_data_struct *)p_data;
 	godot_vector2 vec;
-	
-    if (data->vcodec_ctx != NULL) {
-        api->godot_vector2_new(&vec, data->vcodec_ctx->width, data->vcodec_ctx->height);
-    }
+
+	if (data->vcodec_ctx != NULL) {
+		api->godot_vector2_new(&vec, data->vcodec_ctx->width, data->vcodec_ctx->height);
+	}
 	return vec;
 }
 
