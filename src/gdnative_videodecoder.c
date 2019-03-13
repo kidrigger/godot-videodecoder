@@ -8,8 +8,10 @@
 #include <libswresample/swresample.h>
 #include <libswscale/swscale.h>
 #include <stdint.h>
+#include <string.h>
 
 #include "packet_queue.h"
+#include "set.h"
 
 typedef struct videodecoder_data_struct {
 
@@ -59,8 +61,8 @@ const godot_gdnative_ext_videodecoder_api_struct *videodecoder_api = NULL;
 extern const godot_videodecoder_interface_gdnative plugin_interface;
 
 static const char *plugin_name = "test_plugin";
-static const int num_supported_ext = 2;
-static const char *supported_ext[] = { "mp4", "mov" };
+static int num_supported_ext = 0;
+static const char **supported_ext = NULL;
 
 // Cleanup should empty the struct to the point where you can open a new file from.
 static void _cleanup(videodecoder_data_struct *data) {
@@ -192,6 +194,40 @@ static bool _decode_packet(AVFrame *dest, AVPacket *pkt, AVCodecContext *ctx) {
 	return !x;
 }
 
+static void _update_extensions() {
+	if (num_supported_ext > 0) return;
+
+	const AVInputFormat *current_fmt = NULL;
+	set_t *sup_ext_set = NULL;
+	void *iterator_opaque = NULL;
+	while ((current_fmt = av_demuxer_iterate(&iterator_opaque)) != NULL) {
+		if (current_fmt->extensions != NULL) {
+			char *exts = (char *)api->godot_alloc(strlen(current_fmt->extensions) + 1);
+			strcpy(exts, current_fmt->extensions);
+			char *token = strtok(exts, ",");
+			while (token != NULL) {
+				sup_ext_set = set_insert(sup_ext_set, token);
+				token = strtok(NULL, ", ");
+			}
+			api->godot_free(exts);
+		}
+	}
+
+	list_t ext_list = set_create_list(sup_ext_set);
+	num_supported_ext = list_size(&ext_list);
+	supported_ext = (const char **)api->godot_alloc(sizeof(char *) * num_supported_ext);
+	list_node_t *cur_node = ext_list.start;
+	int i = 0;
+	while (cur_node != NULL) {
+		supported_ext[i] = cur_node->value;
+		cur_node->value = NULL;
+		cur_node = cur_node->next;
+		i++;
+	}
+	list_free(&ext_list);
+	set_free(sup_ext_set);
+}
+
 static inline godot_real _avtime_to_sec(int64_t avtime) {
 	return avtime / (godot_real)AV_TIME_BASE;
 }
@@ -278,11 +314,20 @@ void godot_videodecoder_destructor(void *p_data) {
 	api->godot_free(data);
 	data = NULL; // Not needed, but just to be safe.
 
+	for (int i = 0; i < num_supported_ext; i++) {
+		if (supported_ext[i] != NULL) {
+			api->godot_free((void *)supported_ext[i]);
+		}
+	}
+	api->godot_free(supported_ext);
+	num_supported_ext = 0;
+
 	// DEBUG
 	printf("dtor()\n");
 }
 
 const char **godot_videodecoder_get_supported_ext(int *p_count) {
+	_update_extensions();
 	*p_count = num_supported_ext;
 	return supported_ext;
 }
