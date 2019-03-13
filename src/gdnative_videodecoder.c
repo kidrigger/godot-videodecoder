@@ -314,13 +314,15 @@ void godot_videodecoder_destructor(void *p_data) {
 	api->godot_free(data);
 	data = NULL; // Not needed, but just to be safe.
 
-	for (int i = 0; i < num_supported_ext; i++) {
-		if (supported_ext[i] != NULL) {
-			api->godot_free((void *)supported_ext[i]);
+	if (num_supported_ext > 0) {
+		for (int i = 0; i < num_supported_ext; i++) {
+			if (supported_ext[i] != NULL) {
+				api->godot_free((void *)supported_ext[i]);
+			}
 		}
+		api->godot_free(supported_ext);
+		num_supported_ext = 0;
 	}
-	api->godot_free(supported_ext);
-	num_supported_ext = 0;
 
 	// DEBUG
 	printf("dtor()\n");
