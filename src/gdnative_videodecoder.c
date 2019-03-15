@@ -677,7 +677,7 @@ godot_int godot_videodecoder_get_mix_rate(const void *p_data) {
 	printf("get_mix_rate()\n");
 
 	if (data->acodec_ctx != NULL) {
-		return data->acodec_ctx->sample_rate;
+		return 22050; // Sample rate of 22050 is standard on the decode.
 	}
 	// DEBUG
 	return 0;
