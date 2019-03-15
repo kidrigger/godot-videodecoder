@@ -184,10 +184,14 @@ static int _interleave_audio_frame(float *dest, AVFrame *audio_frame) {
 	return audio_frame->nb_samples;
 }
 
-static bool _decode_packet(AVFrame *dest, AVPacket *pkt, AVCodecContext *ctx) {
+static bool _decode_packet(AVFrame *dest, PacketQueue *pktq, AVCodecContext *ctx) {
+	AVPacket pkt;
+	if (!packet_queue_get(pktq, &pkt)) {
+		return false;
+	}
 	int x = AVERROR(EAGAIN);
 	while (x == AVERROR(EAGAIN)) {
-		if (avcodec_send_packet(ctx, pkt) >= 0) {
+		if (avcodec_send_packet(ctx, &pkt) >= 0) {
 			x = avcodec_receive_frame(ctx, dest);
 		}
 	}
@@ -618,19 +622,15 @@ void godot_videodecoder_update(void *p_data, godot_real p_delta) {
 
 godot_pool_byte_array *godot_videodecoder_get_videoframe(void *p_data) {
 	videodecoder_data_struct *data = (videodecoder_data_struct *)p_data;
-	AVPacket pkt;
 
-	if (!packet_queue_get(data->video_packet_queue, &pkt)) {
+	if (!_decode_packet(data->frame_yuv, data->video_packet_queue, data->vcodec_ctx)) {
 		return NULL;
 	}
-
-	_decode_packet(data->frame_yuv, &pkt, data->vcodec_ctx);
 
 	sws_scale(data->sws_ctx, (uint8_t const *const *)data->frame_yuv->data, data->frame_yuv->linesize, 0,
 			data->vcodec_ctx->height, data->frame_rgb->data, data->frame_rgb->linesize);
 
 	_unwrap_video_frame(&data->unwrapped_frame, data->frame_rgb, data->vcodec_ctx->width, data->vcodec_ctx->height);
-	av_packet_unref(&pkt);
 
 	return &data->unwrapped_frame;
 }
@@ -653,8 +653,7 @@ godot_int godot_videodecoder_get_audio(void *p_data, float *pcm, int num_samples
 
 	while (num_samples > 0) {
 		if (data->num_decoded_samples <= 0) {
-			AVPacket pkt;
-			if (packet_queue_get(data->audio_packet_queue, &pkt) && _decode_packet(data->audio_frame, &pkt, data->acodec_ctx)) {
+			if (_decode_packet(data->audio_frame, data->audio_packet_queue, data->acodec_ctx)) {
 				data->num_decoded_samples = swr_convert(data->swr_ctx, (uint8_t **)&data->audio_buffer, data->audio_frame->nb_samples, (const uint8_t **)data->audio_frame->extended_data, data->audio_frame->nb_samples);
 				// data->num_decoded_samples = _interleave_audio_frame(data->audio_buffer, data->audio_frame);
 				data->audio_buffer_pos = 0;
