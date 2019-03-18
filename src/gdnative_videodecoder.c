@@ -184,18 +184,37 @@ static int _interleave_audio_frame(float *dest, AVFrame *audio_frame) {
 	return audio_frame->nb_samples;
 }
 
-static bool _decode_packet(AVFrame *dest, PacketQueue *pktq, AVCodecContext *ctx) {
-	AVPacket pkt;
-	if (!packet_queue_get(pktq, &pkt)) {
-		return false;
+static bool _buffer_packets(videodecoder_data_struct *data) {
+	while (data->video_packet_queue->nb_packets < 3) {
+		AVPacket pkt;
+		if (av_read_frame(data->format_ctx, &pkt) >= 0) {
+			if (pkt.stream_index == data->videostream_idx) {
+				packet_queue_put(data->video_packet_queue, &pkt);
+			} else if (pkt.stream_index == data->audiostream_idx) {
+				packet_queue_put(data->audio_packet_queue, &pkt);
+			} else {
+				av_packet_unref(&pkt);
+			}
+		} else {
+			return false;
+		}
 	}
+	return true;
+}
+
+static int _decode_packet(AVFrame *dest, PacketQueue *pktq, AVCodecContext *ctx) {
+	AVPacket pkt;
 	int x = AVERROR(EAGAIN);
 	while (x == AVERROR(EAGAIN)) {
+		if (!packet_queue_get(pktq, &pkt)) {
+			return 2;
+		}
 		if (avcodec_send_packet(ctx, &pkt) >= 0) {
 			x = avcodec_receive_frame(ctx, dest);
 		}
+		av_packet_unref(&pkt);
 	}
-	return !x;
+	return !!x;
 }
 
 static void _update_extensions() {
@@ -599,20 +618,7 @@ void godot_videodecoder_update(void *p_data, godot_real p_delta) {
 
 	data->time += p_delta;
 
-	while (data->video_packet_queue->nb_packets < 3) {
-		AVPacket pkt;
-		if (av_read_frame(data->format_ctx, &pkt) >= 0) {
-			if (pkt.stream_index == data->videostream_idx) {
-				packet_queue_put(data->video_packet_queue, &pkt);
-			} else if (pkt.stream_index == data->audiostream_idx) {
-				packet_queue_put(data->audio_packet_queue, &pkt);
-			} else {
-				av_packet_unref(&pkt);
-			}
-		} else {
-			break;
-		}
-	}
+	_buffer_packets(data);
 
 	// printf("A: %i\t", data->audio_packet_queue->nb_packets);
 
@@ -623,7 +629,13 @@ void godot_videodecoder_update(void *p_data, godot_real p_delta) {
 godot_pool_byte_array *godot_videodecoder_get_videoframe(void *p_data) {
 	videodecoder_data_struct *data = (videodecoder_data_struct *)p_data;
 
-	if (!_decode_packet(data->frame_yuv, data->video_packet_queue, data->vcodec_ctx)) {
+	int x;
+	while ((x = _decode_packet(data->frame_yuv, data->video_packet_queue, data->vcodec_ctx)) == 2) {
+		if (!_buffer_packets(data)) {
+			return NULL;
+		}
+	}
+	if (x == 1) {
 		return NULL;
 	}
 
@@ -653,7 +665,7 @@ godot_int godot_videodecoder_get_audio(void *p_data, float *pcm, int num_samples
 
 	while (num_samples > 0) {
 		if (data->num_decoded_samples <= 0) {
-			if (_decode_packet(data->audio_frame, data->audio_packet_queue, data->acodec_ctx)) {
+			if (!_decode_packet(data->audio_frame, data->audio_packet_queue, data->acodec_ctx)) {
 				data->num_decoded_samples = swr_convert(data->swr_ctx, (uint8_t **)&data->audio_buffer, data->audio_frame->nb_samples, (const uint8_t **)data->audio_frame->extended_data, data->audio_frame->nb_samples);
 				// data->num_decoded_samples = _interleave_audio_frame(data->audio_buffer, data->audio_frame);
 				data->audio_buffer_pos = 0;
