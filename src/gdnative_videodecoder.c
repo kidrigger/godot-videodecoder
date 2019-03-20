@@ -10,8 +10,10 @@
 #include <stdint.h>
 #include <string.h>
 
+#include "frame_queue.h"
 #include "packet_queue.h"
 #include "set.h"
+#include <pthread.h>
 
 typedef struct videodecoder_data_struct {
 
@@ -31,8 +33,8 @@ typedef struct videodecoder_data_struct {
 	godot_pool_byte_array unwrapped_frame;
 	godot_real time;
 
-	godot_real video_pts;
-	godot_real audio_pts;
+	int64_t video_pts;
+	int64_t audio_pts;
 
 	int audiostream_idx;
 	AVCodecContext *acodec_ctx;
@@ -49,6 +51,12 @@ typedef struct videodecoder_data_struct {
 	PacketQueue *audio_packet_queue;
 	PacketQueue *video_packet_queue;
 
+	FrameQueue *video_frame_queue;
+
+	pthread_t video_thread;
+	pthread_mutex_t video_thread_mutex;
+	bool video_thread_active;
+
 } videodecoder_data_struct;
 
 const godot_int IO_BUFFER_SIZE = 64 * 1024; // File reading buffer of 64 KiB?
@@ -64,8 +72,23 @@ static const char *plugin_name = "test_plugin";
 static int num_supported_ext = 0;
 static const char **supported_ext = NULL;
 
+static inline godot_real _avtime_to_sec(int64_t avtime) {
+	return avtime / (godot_real)AV_TIME_BASE;
+}
+
 // Cleanup should empty the struct to the point where you can open a new file from.
 static void _cleanup(videodecoder_data_struct *data) {
+
+	if (data->video_thread != 0) {
+		data->video_thread_active = false;
+		pthread_join(data->video_thread, NULL);
+		data->video_thread = 0;
+	}
+
+	if (data->video_frame_queue != NULL) {
+		frame_queue_deinit(data->video_frame_queue);
+		data->video_frame_queue = NULL;
+	}
 
 	if (data->audio_packet_queue != NULL) {
 		packet_queue_deinit(data->audio_packet_queue);
@@ -84,16 +107,19 @@ static void _cleanup(videodecoder_data_struct *data) {
 
 	if (data->audio_frame != NULL) {
 		av_frame_unref(data->audio_frame);
+		av_frame_free(&data->audio_frame);
 		data->audio_frame = NULL;
 	}
 
 	if (data->frame_rgb != NULL) {
 		av_frame_unref(data->frame_rgb);
+		av_frame_free(&data->frame_rgb);
 		data->frame_rgb = NULL;
 	}
 
 	if (data->frame_yuv != NULL) {
 		av_frame_unref(data->frame_yuv);
+		av_frame_free(&data->frame_yuv);
 		data->frame_yuv = NULL;
 	}
 
@@ -153,6 +179,8 @@ static void _cleanup(videodecoder_data_struct *data) {
 	data->time = 0;
 	data->videostream_idx = -1;
 	data->audiostream_idx = -1;
+	data->video_pts = 0;
+	data->audio_pts = 0;
 	data->num_decoded_samples = 0;
 	data->audio_buffer_pos = 0;
 }
@@ -214,7 +242,30 @@ static int _decode_packet(AVFrame *dest, PacketQueue *pktq, AVCodecContext *ctx)
 		}
 		av_packet_unref(&pkt);
 	}
+
 	return !!x;
+}
+
+void *_decode_video_frames(void *p_data) {
+	videodecoder_data_struct *data = (videodecoder_data_struct *)p_data;
+	AVFrame *frame = av_frame_alloc();
+	while (data->video_thread_active) {
+		int x;
+		while ((x = _decode_packet(frame, data->video_packet_queue, data->vcodec_ctx)) == 2) {
+			if (!_buffer_packets(data)) {
+				break;
+			}
+		}
+		if (x == 1) {
+			return NULL;
+		}
+
+		pthread_mutex_lock(&data->video_thread_mutex);
+		frame_queue_put(data->video_frame_queue, frame);
+		pthread_mutex_unlock(&data->video_thread_mutex);
+	}
+
+	return NULL;
 }
 
 static void _update_extensions() {
@@ -249,10 +300,6 @@ static void _update_extensions() {
 	}
 	list_free(&ext_list);
 	set_free(sup_ext_set);
-}
-
-static inline godot_real _avtime_to_sec(int64_t avtime) {
-	return avtime / (godot_real)AV_TIME_BASE;
 }
 
 void GDN_EXPORT godot_gdnative_init(godot_gdnative_init_options *p_options) {
@@ -317,7 +364,13 @@ void *godot_videodecoder_constructor(godot_object *p_instance) {
 	data->audio_packet_queue = NULL;
 	data->video_packet_queue = NULL;
 
+	data->video_frame_queue = NULL;
+
+	data->video_thread = 0;
+
 	data->time = 0;
+	data->video_pts = 0;
+	data->audio_pts = 0;
 
 	api->godot_pool_byte_array_new(&data->unwrapped_frame);
 
@@ -589,10 +642,24 @@ godot_bool godot_videodecoder_open_file(void *p_data, void *file) {
 	swr_init(data->swr_ctx);
 
 	data->time = 0;
+	data->video_pts = 0;
+	data->audio_pts = 0;
 	data->num_decoded_samples = 0;
 
 	data->audio_packet_queue = packet_queue_init();
 	data->video_packet_queue = packet_queue_init();
+
+	data->video_frame_queue = frame_queue_init();
+
+	pthread_mutex_init(&data->video_thread_mutex, NULL);
+	data->video_thread_active = true;
+	if (pthread_create(&data->video_thread, NULL, &_decode_video_frames, data) != 0) {
+		api->godot_print_error("Video decode thread not created.", "godot_videodecoder_open_file()", __FILE__, __LINE__);
+		return GODOT_FALSE;
+	}
+
+	while (data->video_packet_queue->nb_packets > 0 && data->video_frame_queue->nb_frames < 400) {
+	}
 
 	// printf("AUDIO: %i\tVIDEO: %i\n", data->audiostream_idx, data->videostream_idx);
 
@@ -629,22 +696,27 @@ void godot_videodecoder_update(void *p_data, godot_real p_delta) {
 godot_pool_byte_array *godot_videodecoder_get_videoframe(void *p_data) {
 	videodecoder_data_struct *data = (videodecoder_data_struct *)p_data;
 
-	int x;
-	while ((x = _decode_packet(data->frame_yuv, data->video_packet_queue, data->vcodec_ctx)) == 2) {
-		if (!_buffer_packets(data)) {
-			return NULL;
-		}
-	}
-	if (x == 1) {
+	pthread_mutex_lock(&data->video_thread_mutex);
+	AVFrame *frm = av_frame_alloc();
+	if (frame_queue_get(data->video_frame_queue, frm)) {
+		pthread_mutex_unlock(&data->video_thread_mutex);
+
+		data->video_pts = frm->pts;
+
+		sws_scale(data->sws_ctx, (uint8_t const *const *)frm->data, frm->linesize, 0,
+				data->vcodec_ctx->height, data->frame_rgb->data, data->frame_rgb->linesize);
+
+		_unwrap_video_frame(&data->unwrapped_frame, data->frame_rgb, data->vcodec_ctx->width, data->vcodec_ctx->height);
+
+		av_frame_unref(frm);
+		av_frame_free(&frm);
+
+		return &data->unwrapped_frame;
+	} else {
+		pthread_mutex_unlock(&data->video_thread_mutex);
+		av_frame_free(&frm);
 		return NULL;
 	}
-
-	sws_scale(data->sws_ctx, (uint8_t const *const *)data->frame_yuv->data, data->frame_yuv->linesize, 0,
-			data->vcodec_ctx->height, data->frame_rgb->data, data->frame_rgb->linesize);
-
-	_unwrap_video_frame(&data->unwrapped_frame, data->frame_rgb, data->vcodec_ctx->width, data->vcodec_ctx->height);
-
-	return &data->unwrapped_frame;
 }
 
 godot_int godot_videodecoder_get_audio(void *p_data, float *pcm, int num_samples) {
@@ -669,6 +741,7 @@ godot_int godot_videodecoder_get_audio(void *p_data, float *pcm, int num_samples
 				data->num_decoded_samples = swr_convert(data->swr_ctx, (uint8_t **)&data->audio_buffer, data->audio_frame->nb_samples, (const uint8_t **)data->audio_frame->extended_data, data->audio_frame->nb_samples);
 				// data->num_decoded_samples = _interleave_audio_frame(data->audio_buffer, data->audio_frame);
 				data->audio_buffer_pos = 0;
+				data->audio_pts = data->audio_frame->pts;
 			} else {
 				return total_to_send - num_samples;
 			}
@@ -694,7 +767,7 @@ godot_real godot_videodecoder_get_playback_position(const void *p_data) {
 	// printf("get_playback_position()\n");
 
 	if (data->format_ctx) {
-		double pts = (double)data->frame_yuv->pts;
+		double pts = data->video_pts;
 		pts *= av_q2d(data->format_ctx->streams[data->videostream_idx]->time_base);
 		return (godot_real)pts;
 	}

@@ -24,15 +24,15 @@ PacketQueue *packet_queue_init() {
 	return q;
 }
 
-int packet_queue_put(PacketQueue *q, AVPacket *pkt) {
+bool packet_queue_put(PacketQueue *q, AVPacket *pkt) {
 
 	AVPacketList *pkt1;
 	if (av_packet_ref(pkt, pkt) < 0) {
-		return -1;
+		return false;
 	}
 	pkt1 = (AVPacketList *)api->godot_alloc(sizeof(AVPacketList));
 	if (!pkt1)
-		return -1;
+		return false;
 	pkt1->pkt = *pkt;
 	pkt1->next = NULL;
 
@@ -43,16 +43,14 @@ int packet_queue_put(PacketQueue *q, AVPacket *pkt) {
 	q->last_pkt = pkt1;
 	q->nb_packets++;
 	q->size += pkt1->pkt.size;
-	return 0;
+	return true;
 }
 
-int packet_queue_get(PacketQueue *q, AVPacket *pkt) {
+bool packet_queue_get(PacketQueue *q, AVPacket *pkt) {
 	AVPacketList *pkt1;
-	int ret;
 
 	pkt1 = q->first_pkt;
 	if (pkt1) {
-
 		q->first_pkt = pkt1->next;
 		if (!q->first_pkt)
 			q->last_pkt = NULL;
@@ -60,9 +58,21 @@ int packet_queue_get(PacketQueue *q, AVPacket *pkt) {
 		q->size -= pkt1->pkt.size;
 		*pkt = pkt1->pkt;
 		api->godot_free(pkt1);
-		return 1;
+		return true;
 	} else {
-		return 0;
+		return false;
+	}
+}
+
+bool packet_queue_peek(PacketQueue *q, AVPacket *pkt) {
+	AVPacketList *pkt1;
+
+	pkt1 = q->first_pkt;
+	if (pkt1) {
+		*pkt = pkt1->pkt;
+		return true;
+	} else {
+		return false;
 	}
 }
 
