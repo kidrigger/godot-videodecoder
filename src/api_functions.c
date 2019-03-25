@@ -157,9 +157,9 @@ bool _setup_input_streams(videodecoder_data_struct *data) {
 	data->audiostream_idx = -1;
 	// find stream
 	for (int i = 0; i < data->format_ctx->nb_streams; i++) {
-		if (data->format_ctx->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
+		if (data->format_ctx->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_VIDEO && data->videostream_idx == -1) {
 			data->videostream_idx = i;
-		} else if (data->format_ctx->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
+		} else if (data->format_ctx->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_AUDIO && data->audiostream_idx == -1) {
 			data->audiostream_idx = i;
 		}
 	}
