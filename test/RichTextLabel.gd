@@ -1,4 +1,4 @@
-extends VideoPlayer
+extends RichTextLabel
 
 # Declare member variables here. Examples:
 # var a = 2
@@ -10,10 +10,5 @@ func _ready():
 
 # Called every frame. 'delta' is the elapsed time since the previous frame.
 func _process(delta):
+	self.text = str(Engine.get_frames_per_second())
 	pass
-
-
-func _on_VideoPlayer_finished():
-	print("FINIT")
-	get_tree().quit()
-	pass # Replace with function body.

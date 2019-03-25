@@ -1,15 +1,29 @@
-[gd_scene load_steps=3 format=2]
+[gd_scene load_steps=4 format=2]
 
-[ext_resource path="res://samples/guqin.flv" type="VideoStream" id=1]
+[ext_resource path="res://samples/bbb_sunflower_1080p_60fps_normal.mp4" type="VideoStream" id=1]
 [ext_resource path="res://VideoPlayer.gd" type="Script" id=2]
+[ext_resource path="res://RichTextLabel.gd" type="Script" id=3]
 
 [node name="Node2D" type="Node2D"]
 
 [node name="VideoPlayer" type="VideoPlayer" parent="."]
-margin_right = 429.0
-margin_bottom = 306.0
+margin_right = 1024.0
+margin_bottom = 601.0
+audio_track = 1
 stream = ExtResource( 1 )
 autoplay = true
 script = ExtResource( 2 )
+
+[node name="RichTextLabel" type="RichTextLabel" parent="."]
+margin_left = 10.0
+margin_top = 10.0
+margin_right = 42.0
+margin_bottom = 34.0
+custom_colors/default_color = Color( 0, 1, 0.0392157, 1 )
+custom_colors/font_color_shadow = Color( 0, 0, 0, 1 )
+custom_constants/shadow_as_outline = 1
+visible_characters = 5
+text = "FPS"
+script = ExtResource( 3 )
 
 [connection signal="finished" from="VideoPlayer" to="VideoPlayer" method="_on_VideoPlayer_finished"]
