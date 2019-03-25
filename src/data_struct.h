@@ -16,6 +16,7 @@ typedef struct videodecoder_data_struct {
 	AVIOContext *io_ctx;
 	AVFormatContext *format_ctx;
 	godot_bool input_open;
+
 	int videostream_idx;
 	AVCodecContext *vcodec_ctx;
 	godot_bool vcodec_open;
