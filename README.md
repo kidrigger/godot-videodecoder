@@ -26,42 +26,46 @@ git clone git://source.ffmpeg.org/ffmpeg.git ffmpeg
    Use the following flags. (Or as per requirement) [Needs OpenCL].
    **Make sure to replace the path to godot-videodecoder folder!**
 
-    - OSX:
+   
+   - OSX:
 
-```
-./configure --enable-shared --enable-version3 --disable-programs \
---enable-libmp3lame --enable-libtheora \
---enable-libvorbis --enable-libvpx --enable-libwebp \
---enable-opencl --enable-opengl --disable-debug \
---prefix=<path-to-videodecoder-folder>/godot-videodecoder/thirdparty
-```
+      ./configure --enable-shared --enable-version3 --disable-programs \
+      --enable-libmp3lame --enable-libtheora \
+      --enable-libvorbis --enable-libvpx --enable-libwebp \
+      --enable-opencl --enable-opengl --disable-debug \
+      --prefix=<path-to-videodecoder-folder>/godot-videodecoder/thirdparty
 
-    - Linux:
 
-```
-./configure --enable-shared --enable-version3 --disable-programs \
---enable-libmp3lame --enable-libtheora \
---enable-libvorbis --enable-libvpx --enable-libwebp \
---enable-opencl --enable-opengl --disable-debug \
---prefix=<path-to-videodecoder-folder>/godot-videodecoder/thirdparty
-```
+   - Linux:
 
-    - Windows [Untested]:
+      ./configure --enable-shared --enable-version3 --disable-programs \
+      --enable-libmp3lame --enable-libtheora \
+      --enable-libvorbis --enable-libvpx --enable-libwebp \
+      --enable-opencl --enable-opengl --disable-debug \
+      --prefix=<path-to-videodecoder-folder>/godot-videodecoder/thirdparty
 
-```
-configure --enable-shared --enable-version3 --disable-programs \
---enable-libmp3lame --enable-libtheora \
---enable-libvorbis --enable-libvpx --enable-libwebp \
---enable-opencl --enable-opengl --disable-debug \
---prefix=<path-to-videodecoder-folder>/godot-videodecoder/thirdparty
-```
+   - Windows:
+
+      configure --enable-shared --enable-version3 --disable-programs \
+      --enable-libmp3lame --enable-libtheora \
+      --enable-libvorbis --enable-libvpx --enable-libwebp \
+      --enable-opencl --enable-opengl --disable-debug \
+      --prefix=<path-to-videodecoder-folder>/godot-videodecoder/thirdparty
+
 
 5. Run `make` and then `make install`.
 
 6. Go to the Godot videodecoder folder, and clone the samples:
-
-```
-git submodule update --init
-```
-
-7. Now you can simply use the test project.
+   `git submodule update --init`
+   
+7. Now, use `scons` to build the project.
+   - OSX: `scons platform=osx`
+   - Linux: `scons platform=x11`
+   - Windows: `scons platform=win64`
+   
+8. Now you can simply use the test project.
+9. For your own custom project:
+   1. You can copy and paste the `addons` folder from inside the `test` project. (Or you could write your own `.gdnlib` file.)
+   2. Add the plugin to the project in Godot.
+   3. ???
+   4. Enjoy
