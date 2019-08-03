@@ -60,7 +60,7 @@ const godot_gdnative_ext_videodecoder_api_struct *videodecoder_api = NULL;
 
 extern const godot_videodecoder_interface_gdnative plugin_interface;
 
-static const char *plugin_name = "test_plugin";
+static const char *plugin_name = "ffmpeg_videoplayer";
 static int num_supported_ext = 0;
 static const char **supported_ext = NULL;
 
@@ -298,8 +298,7 @@ void *godot_videodecoder_constructor(godot_object *p_instance) {
 
 	api->godot_pool_byte_array_new(&data->unwrapped_frame);
 
-	// DEBUG
-	printf("ctor()\n");
+	// printf("ctor()\n");
 
 	return data;
 }
@@ -324,8 +323,7 @@ void godot_videodecoder_destructor(void *p_data) {
 		num_supported_ext = 0;
 	}
 
-	// DEBUG
-	printf("dtor()\n");
+	// printf("dtor()\n");
 }
 
 const char **godot_videodecoder_get_supported_ext(int *p_count) {
@@ -341,8 +339,7 @@ const char *godot_videodecoder_get_plugin_name(void) {
 godot_bool godot_videodecoder_open_file(void *p_data, void *file) {
 	videodecoder_data_struct *data = (videodecoder_data_struct *)p_data;
 
-	// DEBUG
-	printf("open_file()\n");
+	// printf("open_file()\n");
 
 	// Clean up the previous file.
 	_cleanup(data);
@@ -359,7 +356,7 @@ godot_bool godot_videodecoder_open_file(void *p_data, void *file) {
 	if (read_bytes < IO_BUFFER_SIZE) {
 		// something went wrong, we should be able to read atleast one buffer length.
 		_cleanup(data);
-		api->godot_print_warning("File less that minimum buffer.", "godot_videodecoder_open_file()", __FILE__, __LINE__);
+		api->godot_print_warning("File less then minimum buffer.", "godot_videodecoder_open_file()", __FILE__, __LINE__);
 		return GODOT_FALSE;
 	}
 
@@ -435,6 +432,7 @@ godot_bool godot_videodecoder_open_file(void *p_data, void *file) {
 	if (data->audiostream_idx == -1) {
 		_cleanup(data);
 		api->godot_print_warning("Audio Stream not found.", "godot_videodecoder_open_file()", __FILE__, __LINE__);
+        // TODO: maybe don't quit?
 		return GODOT_FALSE;
 	}
 
@@ -578,9 +576,7 @@ godot_bool godot_videodecoder_open_file(void *p_data, void *file) {
 
 godot_real godot_videodecoder_get_length(const void *p_data) {
 	videodecoder_data_struct *data = (videodecoder_data_struct *)p_data;
-
-	// DEBUG
-	printf("get_length()\n");
+	// printf("get_length()\n");
 
 	if (data->format_ctx == NULL) {
 		api->godot_print_warning("Format context is null.", "godot_videodecoder_get_length()", __FILE__, __LINE__);
@@ -595,7 +591,7 @@ void godot_videodecoder_update(void *p_data, godot_real p_delta) {
 
 	data->time += p_delta;
 
-	while (data->video_packet_queue->nb_packets < 3) {
+	while (data->video_packet_queue->nb_packets < 32) {
 		AVPacket pkt;
 		if (av_read_frame(data->format_ctx, &pkt) >= 0) {
 			if (pkt.stream_index == data->videostream_idx) {
@@ -611,19 +607,19 @@ void godot_videodecoder_update(void *p_data, godot_real p_delta) {
 	}
 
 	// printf("A: %i\t", data->audio_packet_queue->nb_packets);
-
-	// DEBUG Yes. This function works. No more polluting the log.
 	// printf("update()\n");
 }
 
 godot_pool_byte_array *godot_videodecoder_get_videoframe(void *p_data) {
 	videodecoder_data_struct *data = (videodecoder_data_struct *)p_data;
 	AVPacket pkt;
-
+    //printf("get_videoframe()\n");
+restart:
 	if (!packet_queue_get(data->video_packet_queue, &pkt)) {
 		return NULL;
 	}
 
+    //printf("get_videoframe() => decoding...\n");
 	_decode_packet(data->frame_yuv, &pkt, data->vcodec_ctx);
 
 	sws_scale(data->sws_ctx, (uint8_t const *const *)data->frame_yuv->data, data->frame_yuv->linesize, 0,
@@ -679,8 +675,6 @@ godot_int godot_videodecoder_get_audio(void *p_data, float *pcm, int num_samples
 
 godot_real godot_videodecoder_get_playback_position(const void *p_data) {
 	videodecoder_data_struct *data = (videodecoder_data_struct *)p_data;
-	// DEBUG
-	// printf("get_playback_position()\n");
 
 	if (data->format_ctx) {
 		double pts = (double)data->frame_yuv->pts;
@@ -692,41 +686,46 @@ godot_real godot_videodecoder_get_playback_position(const void *p_data) {
 
 void godot_videodecoder_seek(void *p_data, godot_real p_time) {
 	videodecoder_data_struct *data = (videodecoder_data_struct *)p_data;
-	// DEBUG
-	printf("seek()\n");
-	// DEBUG
+	int64_t seek_target = p_time * AV_TIME_BASE;
+	// printf("seek(): %fs = %lld\n", p_time, seek_target);
+	int ret = avformat_seek_file(data->format_ctx, -1, INT64_MIN, seek_target, seek_target, 0);
+	if (ret < 0) {
+		printf("avformat_seek_file() failed");
+	} else {
+		packet_queue_flush(data->video_packet_queue);
+		packet_queue_flush(data->audio_packet_queue);
+		avcodec_flush_buffers(data->vcodec_ctx);
+		avcodec_flush_buffers(data->acodec_ctx);
+		data->num_decoded_samples = 0;
+		data->audio_buffer_pos = 0;
+		data->time = p_time;
+	}
 }
 
 /* ---------------------- TODO ------------------------- */
 
 void godot_videodecoder_set_audio_track(void *p_data, godot_int p_audiotrack) {
 	videodecoder_data_struct *data = (videodecoder_data_struct *)p_data;
-	// DEBUG
-	printf("set_audio_track()\n");
-	// DEBUG
+	printf("set_audio_track(): NOT IMPLEMENTED\n");
 }
 
 godot_int godot_videodecoder_get_channels(const void *p_data) {
 	videodecoder_data_struct *data = (videodecoder_data_struct *)p_data;
-	// DEBUG
-	printf("get_channels()\n");
+	// printf("get_channels()\n");
 
 	if (data->acodec_ctx != NULL) {
 		return data->acodec_ctx->channels;
 	}
-	// DEBUG
 	return 0;
 }
 
 godot_int godot_videodecoder_get_mix_rate(const void *p_data) {
 	videodecoder_data_struct *data = (videodecoder_data_struct *)p_data;
-	// DEBUG
-	printf("get_mix_rate()\n");
+	// printf("get_mix_rate(): FIXED to 22050\n");
 
 	if (data->acodec_ctx != NULL) {
 		return 22050; // Sample rate of 22050 is standard on the decode.
 	}
-	// DEBUG
 	return 0;
 }
 

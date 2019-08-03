@@ -24,6 +24,20 @@ PacketQueue *packet_queue_init() {
 	return q;
 }
 
+void packet_queue_flush(PacketQueue *q) {
+	AVPacketList *pkt, *pkt1;
+
+	for (pkt = q->first_pkt; pkt; pkt = pkt1) {
+		pkt1 = pkt->next;
+		av_packet_unref(&pkt->pkt);
+		api->godot_free(pkt);
+	}
+	q->last_pkt = NULL;
+	q->first_pkt = NULL;
+	q->nb_packets = 0;
+	q->size = 0;
+}
+
 int packet_queue_put(PacketQueue *q, AVPacket *pkt) {
 
 	AVPacketList *pkt1;
