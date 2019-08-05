@@ -41,9 +41,6 @@ void packet_queue_flush(PacketQueue *q) {
 int packet_queue_put(PacketQueue *q, AVPacket *pkt) {
 
 	AVPacketList *pkt1;
-	if (av_packet_ref(pkt, pkt) < 0) {
-		return -1;
-	}
 	pkt1 = (AVPacketList *)api->godot_alloc(sizeof(AVPacketList));
 	if (!pkt1)
 		return -1;
