@@ -5,8 +5,8 @@
 /*                           GODOT ENGINE                                */
 /*                      https://godotengine.org                          */
 /*************************************************************************/
-/* Copyright (c) 2007-2018 Juan Linietsky, Ariel Manzur.                 */
-/* Copyright (c) 2014-2018 Godot Engine contributors (cf. AUTHORS.md)    */
+/* Copyright (c) 2007-2019 Juan Linietsky, Ariel Manzur.                 */
+/* Copyright (c) 2014-2019 Godot Engine contributors (cf. AUTHORS.md)    */
 /*                                                                       */
 /* Permission is hereby granted, free of charge, to any person obtaining */
 /* a copy of this software and associated documentation files (the       */
@@ -59,6 +59,7 @@ typedef struct
 	godot_int (*get_channels)(const void *);
 	godot_int (*get_mix_rate)(const void *);
 	godot_vector2 (*get_texture_size)(const void *);
+    void (*set_netsync)(void *, int, const char *, int);
 } godot_videodecoder_interface_gdnative;
 
 typedef int (*GDNativeAudioMixCallback)(void *, const float *, int);
@@ -72,4 +73,4 @@ void GDAPI godot_videodecoder_register_decoder(const godot_videodecoder_interfac
 }
 #endif
 
-#endif /* !GODOT_NATIVEVIDEODECODER_H */
+#endif /* GODOT_NATIVEVIDEODECODER_H */
