@@ -626,8 +626,10 @@ retry:
 			char msg[512];
 			sprintf(msg, "avcodec_send_packet returns %d", ret);
 			api->godot_print_error(msg, "godot_videodecoder_get_videoframe()", __FILE__, __LINE__);
+			av_packet_unref(&pkt);
 			return NULL;
 		}
+		av_packet_unref(&pkt);
 		goto retry;
 	} else if (ret < 0) {
 		char msg[512];
@@ -679,8 +681,10 @@ retry_audio:
 					char msg[512];
 					sprintf(msg, "avcodec_send_packet returns %d", ret);
 					api->godot_print_error(msg, "godot_videodecoder_get_audio()", __FILE__, __LINE__);
+					av_packet_unref(&pkt);
 					return total_to_send - num_samples;
 				}
+				av_packet_unref(&pkt);
 				goto retry_audio;
 			} else if (ret < 0) {
 				char msg[512];
