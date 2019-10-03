@@ -717,6 +717,8 @@ godot_real godot_videodecoder_get_playback_position(const void *p_data) {
 	videodecoder_data_struct *data = (videodecoder_data_struct *)p_data;
 
 	if (data->format_ctx) {
+		if (data->frame_yuv->pts == AV_NOPTS_VALUE)
+			return (godot_real)0;
 		double pts = (double)data->frame_yuv->pts;
 		pts *= av_q2d(data->format_ctx->streams[data->videostream_idx]->time_base);
 		return (godot_real)pts;
