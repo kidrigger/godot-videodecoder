@@ -457,6 +457,8 @@ godot_bool godot_videodecoder_open_file(void *p_data, void *file) {
 		api->godot_print_warning("Videocodec context init error.", "godot_videodecoder_open_file()", __FILE__, __LINE__);
 		return GODOT_FALSE;
 	}
+	// enable multi-thread decoding based on CPU core count
+	data->vcodec_ctx->thread_count = 0;
 
 	if (avcodec_open2(data->vcodec_ctx, vcodec, NULL) < 0) {
 		_cleanup(data);
@@ -747,8 +749,8 @@ void godot_videodecoder_seek(void *p_data, godot_real p_time) {
 /* ---------------------- TODO ------------------------- */
 
 void godot_videodecoder_set_audio_track(void *p_data, godot_int p_audiotrack) {
-	videodecoder_data_struct *data = (videodecoder_data_struct *)p_data;
-	printf("set_audio_track(): NOT IMPLEMENTED\n");
+	//videodecoder_data_struct *data = (videodecoder_data_struct *)p_data;
+	//printf("set_audio_track(): NOT IMPLEMENTED\n");
 }
 
 godot_int godot_videodecoder_get_channels(const void *p_data) {
