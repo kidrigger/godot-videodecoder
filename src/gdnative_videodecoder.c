@@ -49,6 +49,9 @@ typedef struct videodecoder_data_struct {
 	PacketQueue *audio_packet_queue;
 	PacketQueue *video_packet_queue;
 
+	unsigned long drop_frame;
+	unsigned long total_frame;
+
 } videodecoder_data_struct;
 
 const godot_int IO_BUFFER_SIZE = 512 * 1024; // File reading buffer of 512 KiB
@@ -155,6 +158,8 @@ static void _cleanup(videodecoder_data_struct *data) {
 	data->audiostream_idx = -1;
 	data->num_decoded_samples = 0;
 	data->audio_buffer_pos = 0;
+
+	data->drop_frame = data->total_frame = 0;
 }
 
 static void _unwrap_video_frame(godot_pool_byte_array *dest, AVFrame *frame, int width, int height) {
@@ -561,6 +566,7 @@ godot_bool godot_videodecoder_open_file(void *p_data, void *file) {
 	data->audio_packet_queue = packet_queue_init();
 	data->video_packet_queue = packet_queue_init();
 
+	data->drop_frame = data->total_frame = 0;
 	// printf("AUDIO: %i\tVIDEO: %i\n", data->audiostream_idx, data->videostream_idx);
 
 	return GODOT_TRUE;
@@ -640,7 +646,21 @@ retry:
 		return NULL;
 	}
 
-	// frame successfully decoded here
+	// frame successfully decoded here, now if it lags behind too much (0.05 sec)
+	// let's discard this frame and get the next frame instead
+	int64_t pts = data->frame_yuv->pts == AV_NOPTS_VALUE ? data->frame_yuv->pkt_dts : data->frame_yuv->pts;
+	double ts = pts * av_q2d(data->format_ctx->streams[data->videostream_idx]->time_base);
+	bool drop = ts < data->time - 0.05;
+
+	data->total_frame++;
+	if (drop) {
+		data->drop_frame++;
+		if (data->drop_frame % 20 == 0)
+			printf("get_videoframe: drop frame ts:%03.3f clock:%03.3f %ld/%ld (%.1f%%)\n", ts, data->time,
+					data->drop_frame, data->total_frame, 100.0 * data->drop_frame / data->total_frame);
+		av_packet_unref(&pkt);
+		goto retry;
+	}
 
 	sws_scale(data->sws_ctx, (uint8_t const *const *)data->frame_yuv->data, data->frame_yuv->linesize, 0,
 			data->vcodec_ctx->height, data->frame_rgb->data, data->frame_rgb->linesize);
