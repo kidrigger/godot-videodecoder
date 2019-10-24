@@ -650,14 +650,19 @@ retry:
 	// let's discard this frame and get the next frame instead
 	int64_t pts = data->frame_yuv->pts == AV_NOPTS_VALUE ? data->frame_yuv->pkt_dts : data->frame_yuv->pts;
 	double ts = pts * av_q2d(data->format_ctx->streams[data->videostream_idx]->time_base);
-	bool drop = ts < data->time - 0.05;
+	const static float diff_tolerance = 0.05;
+	bool drop = ts < (data->time - diff_tolerance);
 
 	data->total_frame++;
 	if (drop) {
 		data->drop_frame++;
-		if (data->drop_frame % 20 == 0)
-			printf("get_videoframe: drop frame ts:%03.3f clock:%03.3f %ld/%ld (%.1f%%)\n", ts, data->time,
+		// print warning every 32 dropped frames
+		if ((data->drop_frame & 31) == 0) {
+			char msg[512];
+			sprintf(msg, "Slow CPU! frame dropping: %ld/%ld (%.1f%%)",
 					data->drop_frame, data->total_frame, 100.0 * data->drop_frame / data->total_frame);
+			api->godot_print_warning(msg, "godot_videodecoder_get_videoframe()", __FILE__, __LINE__);
+        }
 		av_packet_unref(&pkt);
 		goto retry;
 	}
