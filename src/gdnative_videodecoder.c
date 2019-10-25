@@ -679,7 +679,7 @@ retry:
 godot_int godot_videodecoder_get_audio(void *p_data, float *pcm, int num_samples) {
 	videodecoder_data_struct *data = (videodecoder_data_struct *)p_data;
 	if (data->audiostream_idx < 0)
-		return num_samples;
+		return 0;
 
 	const int total_to_send = num_samples;
 	int pcm_offset = 0;
