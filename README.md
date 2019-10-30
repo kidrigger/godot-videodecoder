@@ -7,10 +7,12 @@ using the [FFmpeg](https://ffmpeg.org) library for codecs.
 
 ## Instructions to use the test project
 
-1. Clone the repository
+1. Clone the repository and initialize submodules
 
 ```
 git clone https://github.com/KidRigger/godot-videodecoder.git godot-videodecoder
+cd godot-videodecoder
+git submodule update --init --recursive
 ```
 
 2. Clone FFmpeg in another folder.
