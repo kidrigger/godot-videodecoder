@@ -759,7 +759,7 @@ void godot_videodecoder_seek(void *p_data, godot_real p_time) {
 	videodecoder_data_struct *data = (videodecoder_data_struct *)p_data;
 	int64_t seek_target = p_time * AV_TIME_BASE;
 	// printf("seek(): %fs = %lld\n", p_time, seek_target);
-	int ret = avformat_seek_file(data->format_ctx, -1, INT64_MIN, seek_target, seek_target, 0);
+	int ret = avformat_seek_file(data->format_ctx, -1, INT64_MIN, seek_target, seek_target, AVSEEK_FLAG_ANY);
 	if (ret < 0) {
 		api->godot_print_error("avformat_seek_file() failed", "godot_videodecoder_seek()", __FILE__, __LINE__);
 	} else {
