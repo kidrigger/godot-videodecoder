@@ -290,6 +290,8 @@ void *godot_videodecoder_constructor(godot_object *p_instance) {
 	data->video_packet_queue = NULL;
 
 	data->time = 0;
+	data->video_pts = 0;
+	data->audio_pts = 0;
 
 	api->godot_pool_byte_array_new(&data->unwrapped_frame);
 
@@ -747,7 +749,7 @@ godot_real godot_videodecoder_get_playback_position(const void *p_data) {
 
 	if (data->format_ctx) {
 		if (data->frame_yuv->pts == AV_NOPTS_VALUE)
-			return (godot_real)0;
+			return (godot_real)data->time;
 		double pts = (double)data->frame_yuv->pts;
 		pts *= av_q2d(data->format_ctx->streams[data->videostream_idx]->time_base);
 		return (godot_real)pts;
@@ -757,7 +759,12 @@ godot_real godot_videodecoder_get_playback_position(const void *p_data) {
 
 void godot_videodecoder_seek(void *p_data, godot_real p_time) {
 	videodecoder_data_struct *data = (videodecoder_data_struct *)p_data;
+	// Hack to find the end of the video. Really VideoPlayer should expose this!
+	if (p_time < 0) {
+		p_time = _avtime_to_sec(data->format_ctx->duration);
+	}
 	int64_t seek_target = p_time * AV_TIME_BASE;
+
 	// printf("seek(): %fs = %lld\n", p_time, seek_target);
 	int ret = avformat_seek_file(data->format_ctx, -1, INT64_MIN, seek_target, seek_target, AVSEEK_FLAG_ANY);
 	if (ret < 0) {
