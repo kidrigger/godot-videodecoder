@@ -205,6 +205,19 @@ static void _update_extensions() {
 				token = strtok(NULL, ", ");
 			}
 			api->godot_free(exts);
+			if (current_fmt->mime_type) {
+				char *mime_types = (char *)api->godot_alloc(strlen(current_fmt->mime_type) + 1);
+				strcpy(mime_types, current_fmt->mime_type);
+				char *token = strtok(mime_types, ",");
+				// for some reason the webm extension is missing from the format that supports it
+				while (token != NULL) {
+					if (strcmp("video/webm", token) == 0) {
+						sup_ext_set = set_insert(sup_ext_set, "webm");
+					}
+					token = strtok(NULL, ",");
+				}
+				api->godot_free(mime_types);
+			}
 		}
 	}
 
