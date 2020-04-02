@@ -18,6 +18,7 @@ if env['debug']:
     env.Append(CPPFLAGS=['-g'])
 
 if env['platform'] == 'x11':
+    env.Append(LIBPATH=['thirdparty/lib'])
     env.Append(RPATH=env.Literal('\$$ORIGIN/lib/'))
 
 env.Append(CPPPATH=['#thirdparty/include/'])
