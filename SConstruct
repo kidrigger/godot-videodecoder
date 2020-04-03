@@ -7,25 +7,29 @@ opts = Variables()
 opts.Add(BoolVariable('debug','debug build',True))
 opts.Add(BoolVariable('test','copy output to test project',True))
 opts.Add(EnumVariable('platform','can be osx, linux (x11) or windows (win64)','',('osx','x11','win64'),
-                                        map={'linux':'x11','windows':'win64'})) 
+                                        map={'linux':'x11','windows':'win64'}))
 
-osx_renamer = Builder(action = './renamer.py '+ os.environ.get('PWD') +'/thirdparty/lib/ @loader_path/ $SOURCE')
+#probably a better way to do this instead of creating Enviroment() twice
+prefix = 'thirdparty/' + Environment(variables=opts, BUILDERS={})['platform']
+lib_path = prefix + '/lib'
+include_path = prefix + '/include'
+osx_renamer = Builder(action = './renamer.py ' + os.environ.get('PWD') + '/' + lib_path + '/ @loader_path/ $SOURCE')
 env = Environment(variables=opts, BUILDERS={'OSXRename':osx_renamer})
 
-output_path = '#bin/'+env['platform']+'/'
+output_path = '#bin/' + env['platform']+ '/'
 
 if env['debug']:
     env.Append(CPPFLAGS=['-g'])
 
 if env['platform'] == 'x11':
-    env.Append(LIBPATH=['thirdparty/lib'])
-    env.Append(RPATH=env.Literal('\$$ORIGIN/lib/'))
+    env.Append(LIBPATH=[lib_path])
+    env.Append(RPATH=env.Literal('\$$ORIGIN'))
 
-env.Append(CPPPATH=['#thirdparty/include/'])
+env.Append(CPPPATH=['#' + include_path + '/'])
 env.Append(CPPPATH=['#godot_include'])
 
 from glob import glob
-ffmpeg_dylibs = glob('thirdparty/lib/*.dylib')
+ffmpeg_dylibs = glob(lib_path + '/*.dylib')
 
 installed_dylib = []
 for dylib in ffmpeg_dylibs:
