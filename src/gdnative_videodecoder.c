@@ -240,6 +240,36 @@ static inline godot_real _avtime_to_sec(int64_t avtime) {
 	return avtime / (godot_real)AV_TIME_BASE;
 }
 
+static void print_codecs() {
+
+	const AVCodecDescriptor *desc = NULL;
+	unsigned nb_codecs = 0, i = 0;
+	printf("%s: Supported video codecs:\n", plugin_name);
+	while ((desc = avcodec_descriptor_next(desc))) {
+		const AVCodec* codec = NULL;
+		void* i = NULL;
+		bool found = false;
+
+		while ((codec = av_codec_iterate(&i))) {
+			if (codec->id == desc->id && av_codec_is_decoder(codec)) {
+				if (!found && avcodec_find_decoder(desc->id) || avcodec_find_encoder(desc->id)) {
+					printf("%s ", desc->name);
+					printf(avcodec_find_decoder(desc->id) ? "D" : ".");
+					printf(avcodec_find_encoder(desc->id) ? "E" : ".");
+					printf(" (decoders: ");
+					found = true;
+				}
+				if (strcmp(codec->name, desc->name) != 0) {
+					printf("%s, ", codec->name);
+				}
+			}
+		}
+		if (found) {
+			printf(")\n");
+		}
+	}
+}
+
 void GDN_EXPORT godot_gdnative_init(godot_gdnative_init_options *p_options) {
 	api = p_options->api_struct;
 
@@ -254,6 +284,7 @@ void GDN_EXPORT godot_gdnative_init(godot_gdnative_init_options *p_options) {
 			default: break;
 		}
 	}
+	print_codecs();
 }
 
 void GDN_EXPORT godot_gdnative_terminate(godot_gdnative_terminate_options *p_options) {
