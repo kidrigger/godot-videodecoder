@@ -479,8 +479,11 @@ godot_bool godot_videodecoder_open_file(void *p_data, void *file) {
 	AVCodec *vcodec = NULL;
 	vcodec = avcodec_find_decoder(vcodec_param->codec_id);
 	if (vcodec == NULL) {
+		const AVCodecDescriptor *desc = avcodec_descriptor_get(vcodec_param->codec_id);
+		char msg[512] = {0};
+		snprintf(msg, sizeof(msg) - 1, "Videodecoder %s (%s) not found.", desc->name, desc->long_name);
+		api->godot_print_warning(msg, "godot_videodecoder_open_file()", __FILE__, __LINE__);
 		_cleanup(data);
-		api->godot_print_warning("Videodecoder not found.", "godot_videodecoder_open_file()", __FILE__, __LINE__);
 		return GODOT_FALSE;
 	}
 
@@ -514,8 +517,11 @@ godot_bool godot_videodecoder_open_file(void *p_data, void *file) {
 
 		acodec = avcodec_find_decoder(acodec_param->codec_id);
 		if (acodec == NULL) {
+			const AVCodecDescriptor *desc = avcodec_descriptor_get(acodec_param->codec_id);
+			char msg[512] = {0};
+			snprintf(msg, sizeof(msg) - 1, "Audiodecoder %s (%s) not found.", desc-> name, desc->long_name);
+			api->godot_print_warning(msg, "godot_videodecoder_open_file()", __FILE__, __LINE__);
 			_cleanup(data);
-			api->godot_print_warning("Audiodecoder not found.", "godot_videodecoder_open_file()", __FILE__, __LINE__);
 			return GODOT_FALSE;
 		}
 		data->acodec_ctx = avcodec_alloc_context3(acodec);
