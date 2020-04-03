@@ -663,7 +663,7 @@ void godot_videodecoder_update(void *p_data, godot_real p_delta) {
 
 godot_pool_byte_array *godot_videodecoder_get_videoframe(void *p_data) {
 	videodecoder_data_struct *data = (videodecoder_data_struct *)p_data;
-	AVPacket pkt;
+	AVPacket pkt = {0};
 	int ret;
 	//printf("get_videoframe()\n");
 retry:
