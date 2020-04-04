@@ -24,6 +24,7 @@ typedef struct videodecoder_data_struct {
 	AVCodecContext *vcodec_ctx;
 	godot_bool vcodec_open;
 	AVFrame *frame_yuv;
+	bool frame_pts_correct;
 	AVFrame *frame_rgb;
 	struct SwsContext *sws_ctx;
 	uint8_t *frame_buffer;
@@ -683,8 +684,10 @@ retry:
 		}
 		ret = avcodec_send_packet(data->vcodec_ctx, &pkt);
 		if (ret < 0) {
-			char msg[512];
-			sprintf(msg, "avcodec_send_packet returns %d", ret);
+			char err[512];
+			char msg[768];
+			av_strerror(ret, err, sizeof(err) - 1);
+			sprintf(msg, "avcodec_send_packet returns %d (%s)", ret, err);
 			api->godot_print_error(msg, "godot_videodecoder_get_videoframe()", __FILE__, __LINE__);
 			av_packet_unref(&pkt);
 			return NULL;
@@ -700,6 +703,7 @@ retry:
 
 	// frame successfully decoded here, now if it lags behind too much (0.05 sec)
 	// let's discard this frame and get the next frame instead
+	data->frame_pts_correct = data->frame_yuv->pts != AV_NOPTS_VALUE;
 	int64_t pts = data->frame_yuv->pts == AV_NOPTS_VALUE ? data->frame_yuv->pkt_dts : data->frame_yuv->pts;
 	double ts = pts * av_q2d(data->format_ctx->streams[data->videostream_idx]->time_base);
 	const static float diff_tolerance = 0.05;
@@ -798,10 +802,14 @@ godot_real godot_videodecoder_get_playback_position(const void *p_data) {
 	videodecoder_data_struct *data = (videodecoder_data_struct *)p_data;
 
 	if (data->format_ctx) {
-		if (data->frame_yuv->pts == AV_NOPTS_VALUE)
+		if (data->frame_yuv->pts == AV_NOPTS_VALUE || !data->frame_pts_correct) {
+			printf("Playback position by time: %f\n", data->time);
 			return (godot_real)data->time;
+		}
 		double pts = (double)data->frame_yuv->pts;
 		pts *= av_q2d(data->format_ctx->streams[data->videostream_idx]->time_base);
+
+		printf("Playback position by pts: %f\n", pts);
 		return (godot_real)pts;
 	}
 	return (godot_real)0;
@@ -812,13 +820,14 @@ void godot_videodecoder_seek(void *p_data, godot_real p_time) {
 	// Hack to find the end of the video. Really VideoPlayer should expose this!
 	if (p_time < 0) {
 		p_time = _avtime_to_sec(data->format_ctx->duration);
+		printf("Playback position to end: %f\n", p_time);
 	}
 	int64_t seek_target = p_time * AV_TIME_BASE;
 
 	// printf("seek(): %fs = %lld\n", p_time, seek_target);
-	int ret = avformat_seek_file(data->format_ctx, -1, INT64_MIN, seek_target, seek_target, AVSEEK_FLAG_ANY);
+	int ret = avformat_seek_file(data->format_ctx, -1, INT64_MIN, seek_target, seek_target, AVSEEK_FLAG_BACKWARD);
 	if (ret < 0) {
-		api->godot_print_error("avformat_seek_file() failed", "godot_videodecoder_seek()", __FILE__, __LINE__);
+		api->godot_print_error("avformat_seek_file() failed", "godot_videodecoder_seek()\n", __FILE__, __LINE__);
 	} else {
 		packet_queue_flush(data->video_packet_queue);
 		packet_queue_flush(data->audio_packet_queue);
@@ -828,6 +837,8 @@ void godot_videodecoder_seek(void *p_data, godot_real p_time) {
 		data->num_decoded_samples = 0;
 		data->audio_buffer_pos = 0;
 		data->time = p_time;
+		data->frame_pts_correct = false;
+		printf("seek %f\n", p_time);
 	}
 }
 
