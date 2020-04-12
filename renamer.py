@@ -2,12 +2,13 @@
 import os
 import subprocess
 
-def rename_files(prefix, changeto, filenames):
+def rename_files(prefix, changeto, tool_prefix, filenames):
     renamer_buffer = 'RENAMER_BUFFER_314159265358979'
-
+    otool = tool_prefix + 'otool'
+    install_name_tool = tool_prefix + 'install_name_tool'
     for filename in filenames:
         with open(renamer_buffer,'w') as fle:
-            subprocess.call(['otool','-L',filename],stdout=fle)
+            subprocess.call([otool,'-L',filename],stdout=fle)
 
         data = None
         with open(renamer_buffer,'r') as flr:
@@ -23,12 +24,12 @@ def rename_files(prefix, changeto, filenames):
 
         for k,v in to_change.items():
             print(k, v, sep=' -> ')
-            subprocess.call(['install_name_tool','-change',k,v,filename])
+            subprocess.call([install_name_tool,'-change',k,v,filename])
         subprocess.call(['rm',renamer_buffer])
 
 
 if __name__ == '__main__':
     from sys import argv
-    name, prefix, changeto = argv[0:3]
-    filenames = argv[3:]
-    rename_files(prefix, changeto, filenames)
+    name, prefix, changeto, tool_prefix = argv[0:4]
+    filenames = argv[4:]
+    rename_files(prefix, changeto, tool_prefix, filenames)
