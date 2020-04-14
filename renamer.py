@@ -7,13 +7,7 @@ def rename_files(prefix, changeto, tool_prefix, filenames):
     otool = tool_prefix + 'otool'
     install_name_tool = tool_prefix + 'install_name_tool'
     for filename in filenames:
-        with open(renamer_buffer,'w') as fle:
-            subprocess.call([otool,'-L',filename],stdout=fle)
-
-        data = None
-        with open(renamer_buffer,'r') as flr:
-            data = flr.read()
-
+        data = str(subprocess.check_output([otool,'-L',filename])).strip()
         val = map(lambda x: x[0], map(str.split,map(str.strip, data.strip().split('\n'))))
         val = list(val)[2:]
 
@@ -25,7 +19,6 @@ def rename_files(prefix, changeto, tool_prefix, filenames):
         for k,v in to_change.items():
             print(k, v, sep=' -> ')
             subprocess.call([install_name_tool,'-change',k,v,filename])
-        subprocess.call(['rm',renamer_buffer])
 
 
 if __name__ == '__main__':
