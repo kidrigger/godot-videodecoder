@@ -7,67 +7,51 @@ using the [FFmpeg](https://ffmpeg.org) library for codecs.
 
 ## Instructions to use the test project
 
-1. Clone the repository and initialize submodules
+<!-- Ideally this would all be set up to build in a docker container, but I ran out of time -->
+1. Add the repository as a submodule or clone the repository somewhere and initialize submodules.
 
 ```
-git clone https://github.com/KidRigger/godot-videodecoder.git godot-videodecoder
-cd godot-videodecoder
+git submodule add https://github.com/jamie-pate/godot-videodecoder.git contrib/godot-videodecoder
 git submodule update --init --recursive
 ```
 
-2. Clone FFmpeg in another folder.
+or
 
 ```
-git clone git://source.ffmpeg.org/ffmpeg.git ffmpeg
+git clone https://github.com/jamie-pate/godot-videodecoder.git godot-videodecoder
+cd contrib/godot-videodecoder
+git submodule update --init --recursive
 ```
 
-3. Switch ffmpeg to branch `release/4.1`
-   (Tested with both `release/4.0` and `release/4.1`.)
+2. Add FFmpeg submodule in another folder.
 
-4. Configure FFmpeg using the `configure` tool in the ffmpeg repository.
-   Use the following flags. (Or as per requirement) [Needs OpenCL].
-   **Make sure to replace the path to godot-videodecoder folder!**
+```
+git submodule add https://github.com/jamie-pate/ffmpeg-static.git contrib/ffmpeg-static
+git submodule update --init --recursive
+```
 
-   
-   - OSX:
+or
 
-      ./configure --enable-shared --enable-version3 --disable-programs \
-      --enable-libmp3lame --enable-libtheora \
-      --enable-libvorbis --enable-libvpx --enable-libwebp \
-      --enable-opencl --enable-opengl --disable-debug \
-      --prefix=<path-to-videodecoder-folder>/godot-videodecoder/thirdparty
+```
+git clone https://github.com/jamie-pate/ffmpeg-static.git
+```
 
+3. Copy the `build_gdnative.sh.example` to your project and adjust the paths inside.
+<!-- this step needs improvement -->
 
-   - Linux:
+* `cp contrib/godot-videodecoder/build_gdnative.sh.example ./build_gdnative.sh`, vi `./build_gdnative.sh`
+* `chmod +x ./build_gdnative.sh` if needed
 
-      ./configure --enable-shared --enable-version3 --disable-programs \
-      --enable-libmp3lame --enable-libtheora \
-      --enable-libvorbis --enable-libvpx --enable-libwebp \
-      --enable-opencl --enable-opengl --disable-debug \
-      --prefix=<path-to-videodecoder-folder>/godot-videodecoder/thirdparty
+4. Install dependencies
 
-   - Windows:
+* `cd contrib/ffmpeg-static; ./install-ubuntu-deps.sh` -- This should install many required dependencies.
+<!-- but might not be 100% complete -->
+* make sure you are set up to cross compile godot and plugins:
+* http://docs.godotengine.org/en/3.2/development/compiling/compiling_for_x11.html
+* http://docs.godotengine.org/en/3.2/development/compiling/compiling_for_windows.html#cross-compiling-for-windows-from-other-operating-systems
+* http://docs.godotengine.org/en/3.2/development/compiling/compiling_for_osx.html#cross-compiling-for-macos-from-linux
+   * NOTE: use XCode 7 for darwin15 support: https://developer.apple.com/download/more/?name=Xcode%207.3.1
 
-      configure --enable-shared --enable-version3 --disable-programs \
-      --enable-libmp3lame --enable-libtheora \
-      --enable-libvorbis --enable-libvpx --enable-libwebp \
-      --enable-opencl --enable-opengl --disable-debug \
-      --prefix=<path-to-videodecoder-folder>/godot-videodecoder/thirdparty
+5. then run `./build_gdnative.sh`
 
-
-5. Run `make` and then `make install`.
-
-6. Go to the Godot videodecoder folder, and clone the samples:
-   `git submodule update --init`
-   
-7. Now, use `scons` to build the project.
-   - OSX: `scons platform=osx`
-   - Linux: `scons platform=x11`
-   - Windows: `scons platform=win64`
-   
-8. Now you can simply use the test project.
-9. For your own custom project:
-   1. You can copy and paste the `addons` folder from inside the `test` project. (Or you could write your own `.gdnlib` file.)
-   2. Add the plugin to the project in Godot.
-   3. ???
-   4. Enjoy
+If you adjusted the paths correctly it should have created `addons/bin/(x11|win64|osx)` which should be full of libraries. You should copy `godot-videodecoder/test/addons/videodecoder.gdnlib` to your `addons` directory and make any changes you need.
