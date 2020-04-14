@@ -1,28 +1,37 @@
-[gd_scene load_steps=2 format=2]
+[gd_scene load_steps=3 format=2]
 
-[ext_resource path="res://samples/big_buck_bunny.mp4" type="VideoStream" id=1]
+[ext_resource path="res://samples/2Thursday-FortiMonitor-vp9.webm" type="VideoStream" id=1]
+[ext_resource path="res://World.gd" type="Script" id=2]
 
-[node name="Node2D" type="Node2D" index="0"]
+[node name="World" type="Control"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+script = ExtResource( 2 )
+__meta__ = {
+"_edit_use_anchors_": false
+}
 
-[node name="VideoPlayer" type="VideoPlayer" parent="." index="0"]
-anchor_left = 0.0
-anchor_top = 0.0
-anchor_right = 0.0
-anchor_bottom = 0.0
-margin_right = 429.0
-margin_bottom = 306.0
-rect_pivot_offset = Vector2( 0, 0 )
-rect_clip_content = false
-mouse_filter = 0
-mouse_default_cursor_shape = 0
-size_flags_horizontal = 1
-size_flags_vertical = 1
-audio_track = 0
+[node name="VideoPlayer" type="VideoPlayer" parent="."]
+anchor_right = 1.0
+anchor_bottom = 1.0
+margin_left = 3.05267
+margin_top = -4.05264
+margin_right = 3.05273
+margin_bottom = -52.0526
 stream = ExtResource( 1 )
-volume_db = 0.0
-autoplay = true
-paused = false
-expand = true
-buffering_msec = 500
-bus = "Master"
+__meta__ = {
+"_edit_use_anchors_": false
+}
 
+[node name="ProgressBar" type="ProgressBar" parent="."]
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+margin_top = -48.0
+percent_visible = false
+
+[node name="Label" type="Label" parent="ProgressBar"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+align = 1
+valign = 1
