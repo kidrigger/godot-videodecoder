@@ -1,0 +1,65 @@
+#! /bin/bash
+
+# make sure you are set up to cross compile godot and plugins:
+# http://docs.godotengine.org/en/3.2/development/compiling/compiling_for_x11.html
+# http://docs.godotengine.org/en/3.2/development/compiling/compiling_for_windows.html#cross-compiling-for-windows-from-other-operating-systems
+# http://docs.godotengine.org/en/3.2/development/compiling/compiling_for_osx.html#cross-compiling-for-macos-from-linux
+# NOTE: use XCode 7 for darwin15 support: https://developer.apple.com/download/more/?name=Xcode%207.3.1
+
+# cp contrib/MacOSX10.*.sdk.tar.gz ~/src/osxcross/tarballs
+# cd ~/src/osxcross; ./build.sh && ./build_gcc.sh
+# https://docs.godotengine.org/en/3.2/tutorials/plugins/gdnative/gdnative-c-example.html
+
+# to build just the plugin, run $0 --no-libs
+
+TARGET_DIR=$PWD/contrib/godot-videodecoder/thirdparty
+PLUGIN_BIN_DIR=$PWD/contrib/godot-videodecoder/bin
+ADDON_BIN_DIR=$PWD/godot/addons/bin
+# TODO: make this more portable?
+OSXCROSS_BIN_DIR=$HOME/src/osxcross/target/bin
+
+dist="$(lsb_release -is)"
+JOBS="$(echo "$(cat /proc/cpuinfo  | grep processor |wc -l) - 1" |  bc -l)"
+if [[ "$dist" == "Ubuntu" ]]; then
+    echo "you may need to run contrib/ffmpeg-static/install-deps-ubuntu.sh"
+fi
+
+on_error() {
+    caller
+    echo $@
+    exit $1
+}
+
+trap 'on_error' ERR
+if [[ "$1" != "--no-libs" ]]; then
+    if [ ! -z "$ADDON_BIN_DIR" ] && [ ! -z "$PLUGIN_BIN_DIR" ]; then
+        rm -rf $ADDON_BIN_DIR/* $PLUGIN_BIN_DIR
+    fi
+    pushd contrib/ffmpeg-static
+        set -x
+        ./build.sh -B -T "$TARGET_DIR/x11" -j $JOBS
+        mkdir -p "$ADDON_BIN_DIR/x11"
+        cp -a $TARGET_DIR/x11/lib/* "$ADDON_BIN_DIR/x11"
+        ./build.sh -B -p windows -T "$TARGET_DIR/win64" -j $JOBS
+        mkdir -p "$ADDON_BIN_DIR/win64"
+        cp $TARGET_DIR/win64/bin/* "$ADDON_BIN_DIR/win64"
+        ./build.sh -B -p darwin -T "$TARGET_DIR/osx" -j $JOBS
+        mkdir -p "$ADDON_BIN_DIR/osx"
+        cp -a $TARGET_DIR/osx/lib/* "$TARGET_DIR/osx"
+        set +x
+
+    popd
+fi
+pushd contrib/godot-videodecoder
+    set -x
+    scons platform=x11
+    cp -a $PLUGIN_BIN_DIR/x11/* "$ADDON_BIN_DIR/x11"
+    scons platform=windows
+    cp $PLUGIN_BIN_DIR/win64/* "$ADDON_BIN_DIR/win64"
+    # NOTE: -j doesn't work with this platform
+    scons platform=osx toolchainbin=$OSXCROSS_BIN_DIR
+    cp -a $PLUGIN_BIN_DIR/osx/* "$ADDON_BIN_DIR/osx"
+    # remove symlinks since we don't need them.
+    find $PLUGIN_BIN_DIR -type l -exec rm {} \;
+    set +x
+popd
