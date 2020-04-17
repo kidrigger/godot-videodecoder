@@ -38,28 +38,16 @@ if [[ "$1" != "--no-libs" ]]; then
     pushd contrib/ffmpeg-static
         set -x
         ./build.sh -B -T "$TARGET_DIR/x11" -j $JOBS
-        mkdir -p "$ADDON_BIN_DIR/x11"
-        cp -a $TARGET_DIR/x11/lib/* "$ADDON_BIN_DIR/x11"
         ./build.sh -B -p windows -T "$TARGET_DIR/win64" -j $JOBS
-        mkdir -p "$ADDON_BIN_DIR/win64"
-        cp $TARGET_DIR/win64/bin/* "$ADDON_BIN_DIR/win64"
         ./build.sh -B -p darwin -T "$TARGET_DIR/osx" -j $JOBS
-        mkdir -p "$ADDON_BIN_DIR/osx"
-        cp -a $TARGET_DIR/osx/lib/* "$TARGET_DIR/osx"
         set +x
-
     popd
 fi
 pushd contrib/godot-videodecoder
     set -x
-    scons platform=x11
-    cp -a $PLUGIN_BIN_DIR/x11/* "$ADDON_BIN_DIR/x11"
-    scons platform=windows
-    cp $PLUGIN_BIN_DIR/win64/* "$ADDON_BIN_DIR/win64"
+    scons platform=x11 prefix="$ADDON_BIN_DIR"
+    scons platform=windows prefix="$ADDON_BIN_DIR"
     # NOTE: -j doesn't work with this platform
-    scons platform=osx toolchainbin=$OSXCROSS_BIN_DIR
-    cp -a $PLUGIN_BIN_DIR/osx/* "$ADDON_BIN_DIR/osx"
-    # remove symlinks since we don't need them.
-    find $PLUGIN_BIN_DIR -type l -exec rm {} \;
+    scons platform=osx toolchainbin=$OSXCROSS_BIN_DIR prefix="$ADDON_BIN_DIR"
     set +x
 popd
