@@ -20,7 +20,7 @@ lib_path = lib_prefix + '/lib'
 include_path = lib_prefix + '/include'
 # probably a better way to do this too (pass $TOOL_PREFIX)
 osx_renamer = Builder(action = './renamer.py ' + os.environ.get('PWD') + '/' + lib_path + '/ @loader_path/ "$TOOL_PREFIX" $SOURCE', )
-env = Environment(variables=opts, BUILDERS={'OSXRename':osx_renamer})
+env = Environment(variables=opts, BUILDERS={'OSXRename':osx_renamer}, CFLAGS='-std=gnu11')
 
 if env['toolchainbin']:
     env.PrependENVPath('PATH', env['toolchainbin'])
