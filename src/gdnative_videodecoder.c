@@ -13,6 +13,7 @@
 #include "packet_queue.h"
 #include "set.h"
 
+enum POSITION_TYPE {POS_V_PTS, POS_TIME, POS_A_TIME};
 typedef struct videodecoder_data_struct {
 
 	godot_object *instance; // Don't clean
@@ -24,7 +25,6 @@ typedef struct videodecoder_data_struct {
 	AVCodecContext *vcodec_ctx;
 	godot_bool vcodec_open;
 	AVFrame *frame_yuv;
-	bool frame_pts_correct;
 	AVFrame *frame_rgb;
 	struct SwsContext *sws_ctx;
 	uint8_t *frame_buffer;
@@ -32,8 +32,8 @@ typedef struct videodecoder_data_struct {
 	godot_pool_byte_array unwrapped_frame;
 	godot_real time;
 
-	godot_real video_pts;
-	godot_real audio_pts;
+	double audio_time;
+	int debug_audio;
 
 	int audiostream_idx;
 	AVCodecContext *acodec_ctx;
@@ -50,8 +50,11 @@ typedef struct videodecoder_data_struct {
 	PacketQueue *audio_packet_queue;
 	PacketQueue *video_packet_queue;
 
+	enum POSITION_TYPE position_type;
 	unsigned long drop_frame;
 	unsigned long total_frame;
+	unsigned long drop_concurrent;
+	char drop_hist[256];
 
 } videodecoder_data_struct;
 
@@ -67,6 +70,16 @@ extern const godot_videodecoder_interface_gdnative plugin_interface;
 static const char *plugin_name = "ffmpeg_videoplayer";
 static int num_supported_ext = 0;
 static const char **supported_ext = NULL;
+static uint64_t _clock_start = 0;
+
+static uint64_t get_ticks_msec() {
+	struct timespec tv_now = { 0, 0 };
+	clock_gettime(CLOCK_MONOTONIC_RAW, &tv_now);
+	uint64_t longtime = ((uint64_t)tv_now.tv_nsec / 1.0e6L) + (uint64_t)tv_now.tv_sec * 1000L;
+	longtime -= _clock_start;
+
+	return longtime;
+}
 
 // Cleanup should empty the struct to the point where you can open a new file from.
 static void _cleanup(videodecoder_data_struct *data) {
@@ -272,6 +285,7 @@ static void print_codecs() {
 }
 
 void GDN_EXPORT godot_gdnative_init(godot_gdnative_init_options *p_options) {
+	_clock_start = get_ticks_msec();
 	api = p_options->api_struct;
 
 	for (int i = 0; i < api->num_extensions; i++) {
@@ -334,12 +348,14 @@ void *godot_videodecoder_constructor(godot_object *p_instance) {
 	data->audio_packet_queue = NULL;
 	data->video_packet_queue = NULL;
 
+	data->position_type = POS_A_TIME;
 	data->time = 0;
-	data->video_pts = 0;
-	data->audio_pts = 0;
+	data->audio_time = NAN;
+
 
 	api->godot_pool_byte_array_new(&data->unwrapped_frame);
 
+	memset(data->drop_hist, 0, sizeof(data->drop_hist));
 	// printf("ctor()\n");
 
 	return data;
@@ -663,8 +679,17 @@ static bool read_frame(videodecoder_data_struct *data) {
 
 void godot_videodecoder_update(void *p_data, godot_real p_delta) {
 	videodecoder_data_struct *data = (videodecoder_data_struct *)p_data;
+	// during 'update' make sure to use video_pts for the time
+	// the godot plugin interface expects this
+	data->position_type = POS_V_PTS;
 
 	data->time += p_delta;
+	bool print = data->debug_audio > 0;
+	double nan = NAN;
+	if (!isnan(data->audio_time)) {
+		data->audio_time += p_delta;
+	}
+	if (print) printf("%ld UPDATE: %f (at:%f)\n", get_ticks_msec(), data->time, data->audio_time);
 	read_frame(data);
 }
 
@@ -672,6 +697,11 @@ godot_pool_byte_array *godot_videodecoder_get_videoframe(void *p_data) {
 	videodecoder_data_struct *data = (videodecoder_data_struct *)p_data;
 	AVPacket pkt = {0};
 	int ret;
+	size_t drop_count = 0;
+	// to maintain a decent game frame rate
+	// don't let frame decoding take more than this number of ms
+	uint64_t max_frame_drop_time = 10;
+	uint64_t start = get_ticks_msec();
 	//printf("get_videoframe()\n");
 retry:
 	ret = avcodec_receive_frame(data->vcodec_ctx, data->frame_yuv);
@@ -703,22 +733,49 @@ retry:
 
 	// frame successfully decoded here, now if it lags behind too much (0.05 sec)
 	// let's discard this frame and get the next frame instead
-	data->frame_pts_correct = data->frame_yuv->pts != AV_NOPTS_VALUE;
-	int64_t pts = data->frame_yuv->pts == AV_NOPTS_VALUE ? data->frame_yuv->pkt_dts : data->frame_yuv->pts;
+	bool pts_correct = data->frame_yuv->pts == AV_NOPTS_VALUE;
+	int64_t pts = pts_correct ? data->frame_yuv->pkt_dts : data->frame_yuv->pts;
+
 	double ts = pts * av_q2d(data->format_ctx->streams[data->videostream_idx]->time_base);
-	const static float diff_tolerance = 0.05;
-	bool drop = ts < (data->time - diff_tolerance);
+	bool audio_drop = false;
+
+	if (pts_correct && !isnan(data->audio_time) && data->audiostream_idx >= 0) {
+		double audio_offset = data->time - data->audio_time;
+		if (fabs(audio_offset) > 0.05) {
+			if (audio_offset < 0) {
+				audio_drop = true;
+			} else {
+				printf("Excessive audio offset: (%f) v:%f .. a:%f\n", audio_offset, ts, data->audio_time);
+			}
+		}
+	}
 
 	data->total_frame++;
-	if (drop) {
+
+	const static double diff_tolerance = 0.05;
+	double drop_time = data->time;//!isnan(data->audio_time) ? data->time : data->audio_time;
+	bool drop = ts < drop_time - diff_tolerance;
+	data->drop_hist[(data->total_frame + 1) % (sizeof(data->drop_hist)-1)] = '<';
+	data->drop_hist[data->total_frame % (sizeof(data->drop_hist)-1)] = drop ? 'x' : '.';
+	data->drop_concurrent = drop ? data->drop_concurrent + 1 : 0;
+	uint64_t drop_duration = get_ticks_msec() - start;
+	if (drop && drop_duration > max_frame_drop_time) {
+		data->debug_audio = 5;
+		// hack to get video_stream_gdnative to stop asking for frames.
+		// stop trusting frame_pts until the next time get_videoframe is called.
+		// this will unblock VideoStreamPlaybackGDNative::update() which keeps calling get_texture() until the time matches
+		char msg[512];
+		sprintf(msg, "Slow CPU? Dropped frames for %ldms frame dropped last %ld: %ld/%ld (%.1f%% %s) pts=%.1f t=%.1f %s",
+			drop_duration,
+			data->drop_concurrent,
+			data->drop_frame,
+			data->total_frame,
+			100.0 * data->drop_frame / data->total_frame,
+			data->drop_hist,
+			ts, data->time, audio_drop ? "(audio)" : "");
+		api->godot_print_warning(msg, "godot_videodecoder_get_videoframe()", __FILE__, __LINE__);
+	} else if (drop) {
 		data->drop_frame++;
-		// print warning every 32 dropped frames
-		if ((data->drop_frame & 31) == 0) {
-			char msg[512];
-			sprintf(msg, "Slow CPU! frame dropping: %ld/%ld (%.1f%%)",
-					data->drop_frame, data->total_frame, 100.0 * data->drop_frame / data->total_frame);
-			api->godot_print_warning(msg, "godot_videodecoder_get_videoframe()", __FILE__, __LINE__);
-        }
 		av_packet_unref(&pkt);
 		goto retry;
 	}
@@ -728,38 +785,136 @@ retry:
 
 	_unwrap_video_frame(&data->unwrapped_frame, data->frame_rgb, data->vcodec_ctx->width, data->vcodec_ctx->height);
 	av_packet_unref(&pkt);
-
+	// don't use video pts for playback time next time godot calls.
+	// otherwise godot will keep retrying, and we've already handled frame skipping
+	data->position_type = POS_TIME;
 	return &data->unwrapped_frame;
+}
+
+static void _print_audio_buffer(videodecoder_data_struct *data, int size) {
+	char vis[256] = "";
+	int i;
+	bool empty = true;
+	int j = 0;
+	int k = 0;
+	float s = 0;
+	const int s_per_char = 4;
+	const char s_chars[] = " _.-'^";
+	const int s_chars_len = strlen(s_chars);
+	float s_ceil = s_per_char * 0.05;
+	for (size_t i = 0; i < size; ++i) {
+		s += fabs(data->audio_buffer[data->acodec_ctx->channels * data->audio_buffer_pos + i]);
+		if (s != 0) {
+			empty = false;
+		}
+		++j;
+		if (j > s_per_char) {
+			j = 0;
+			char ch = ' ';
+			if (s != 0) {
+				s = s;
+				int idx = (int)ceil(s / s_ceil - 0.01);
+				if (idx >= s_chars_len) {
+					idx = s_chars_len - 1;
+				} else if (idx < 0) {
+					idx = 0;
+				}
+				ch = s_chars[idx];
+			}
+			vis[k] = ch;
+			++k;
+			if (k >= sizeof(vis)) {
+				break;
+			}
+		}
+		s = 0;
+	}
+	if (k > sizeof(vis) - 1) {
+		k = sizeof(vis) - 1;
+	}
+	vis[k] = 0;
+	if (empty) {
+		vis[0] = 0;
+	}
+	printf("\n\t[SEND p:%d s:%d %s] ", data->audio_buffer_pos, size, vis);
 }
 
 godot_int godot_videodecoder_get_audio(void *p_data, float *pcm, int num_samples) {
 	videodecoder_data_struct *data = (videodecoder_data_struct *)p_data;
 	if (data->audiostream_idx < 0)
 		return 0;
-
-	const int total_to_send = num_samples;
+	if (isnan(data->audio_time)) {
+		data->debug_audio = 25;
+	}
+	bool first_frame = true;
+	bool print = data->debug_audio > 0;
+	uint64_t start = get_ticks_msec();
+	if (print) {
+		--data->debug_audio;
+	}
+	float diff_tolerance = 0.1;
+	float audio_offset = 0;
+	bool audio_wait = isnan(data->audio_time) || data->audio_time > data->time + audio_offset;
+	if (print) {
+		printf("%d %ld: aw:%d audio decoded:%d ", data->debug_audio, start, audio_wait, data->num_decoded_samples);
+	}
+	const int total_req_samples = num_samples;
 	int pcm_offset = 0;
+	// don't send any pcm data if the frame hasn't started yet
+	double ats = data->audio_frame->pts * av_q2d(data->format_ctx->streams[data->audiostream_idx]->time_base);
+	if (audio_wait && data->num_decoded_samples) {
+		if (ats > data->time) {
+			if (print) printf("\n\t[WAIT %f > %f]\n", ats, data->time);
+			return 0;
+		}
+		if (print) printf(" [!WAIT %f <= %f]", ats, data->time);
+	}
+	bool skip = audio_wait && data->time - ats > diff_tolerance;
+	if (skip) {
+		// skip the already decoded samples because it's too late.
+		if (print) {
+			printf(" [SKIP %d (%f > %f)] ", data->num_decoded_samples, data->time - ats, diff_tolerance);
+		}
+		data->num_decoded_samples = 0;
+	}
+	int to_send_total = 0;
 	int to_send = (num_samples < data->num_decoded_samples) ? num_samples : data->num_decoded_samples;
+
 	if (to_send > 0) {
+		if (print) {
+			_print_audio_buffer(data, to_send);
+			printf("[OLD %d]", to_send);
+		}
 		memcpy(pcm, data->audio_buffer + data->acodec_ctx->channels * data->audio_buffer_pos, sizeof(float) * to_send * data->acodec_ctx->channels);
 		// printf("Copy 0:%i from %i:%i\n", to_send, data->audio_buffer_pos, data->audio_buffer_pos + to_send);
 		pcm_offset += to_send;
 		num_samples -= to_send;
 		data->num_decoded_samples -= to_send;
 		data->audio_buffer_pos += to_send;
+		to_send_total += to_send;
 	}
-
+	if (print) printf(" [NS %d DS %d] ", num_samples, data->num_decoded_samples);
 	while (num_samples > 0) {
 		if (data->num_decoded_samples <= 0) {
 			AVPacket pkt;
-			
+
 			int ret;
 retry_audio:
+			if (print) printf(" [RECF %d] ", to_send);
 			ret = avcodec_receive_frame(data->acodec_ctx, data->audio_frame);
 			if (ret == AVERROR(EAGAIN)) {
-				// need to call avcodedc_send_packet, get a packet from queue to send it
+				// need to call avcodec_send_packet, get a packet from queue to send it
 				if (!packet_queue_get(data->audio_packet_queue, &pkt)) {
-					return total_to_send - num_samples;
+					if (print) {
+						printf("!packet_queue_get %d aw:%d\n", total_req_samples - num_samples, audio_wait);
+					}
+					if (total_req_samples == num_samples) {
+						// if we haven't got any on-time audio yet, then the audio_time counter is meaningless.
+						data->audio_time = NAN;
+					} else {
+						printf("!packet_queue_get (after samples) %d aw:%d", total_req_samples - num_samples, audio_wait);
+					}
+					return total_req_samples - num_samples;
 				}
 				ret = avcodec_send_packet(data->acodec_ctx, &pkt);
 				if (ret < 0) {
@@ -767,7 +922,7 @@ retry_audio:
 					sprintf(msg, "avcodec_send_packet returns %d", ret);
 					api->godot_print_error(msg, "godot_videodecoder_get_audio()", __FILE__, __LINE__);
 					av_packet_unref(&pkt);
-					return total_to_send - num_samples;
+					return total_req_samples - num_samples;
 				}
 				av_packet_unref(&pkt);
 				goto retry_audio;
@@ -775,41 +930,111 @@ retry_audio:
 				char msg[512];
 				sprintf(msg, "avcodec_receive_frame returns %d", ret);
 				api->godot_print_error(msg, "godot_videodecoder_get_audio()", __FILE__, __LINE__);
-				return total_to_send - num_samples;
+				return total_req_samples - num_samples;
 			}
-
+			// only set the audio frame time if this is the first frame we've decoded this update.
+			// any remaining frames are going into a buffer anyways
+			ats = data->audio_frame->pts * av_q2d(data->format_ctx->streams[data->audiostream_idx]->time_base);
+			if (first_frame) {
+				data->audio_time = ats;
+				first_frame = false;
+				if (print) printf(" [SET AT %f] ", data->audio_time);
+			}
 			// decoded audio ready here
 			data->num_decoded_samples = swr_convert(data->swr_ctx, (uint8_t **)&data->audio_buffer, data->audio_frame->nb_samples, (const uint8_t **)data->audio_frame->extended_data, data->audio_frame->nb_samples);
 			// data->num_decoded_samples = _interleave_audio_frame(data->audio_buffer, data->audio_frame);
 			data->audio_buffer_pos = 0;
 		}
 
-		to_send = (num_samples < data->num_decoded_samples) ? num_samples : data->num_decoded_samples;
+		skip = audio_wait && data->time - ats > diff_tolerance;
+		if (skip) {
+			// skip samples if the frame time is too far in the past
+			data->num_decoded_samples = 0;
+			printf(" [SKIP %d (%f > %f)] ", data->num_decoded_samples, data->time - ats, diff_tolerance);
+		}
+		// don't send any pcm data if the first frame hasn't started yet
+		if (audio_wait && data->audio_time > data->time) {
+			if (print) {
+				if (skip) {
+				} else {
+					printf("\n\t[WAIT %f > %f] ", data->audio_time, data->time);
+				}
+			}
+			to_send = 0;
+			data->audio_time = NAN;
+			break;
+		}
+		if (print && audio_wait) printf(" [!WAIT %f <= %f] ", data->audio_time, data->time);
+		to_send = num_samples < data->num_decoded_samples ? num_samples : data->num_decoded_samples;
 		if (to_send > 0) {
+			if (print) _print_audio_buffer(data, to_send);
 			memcpy(pcm + pcm_offset * data->acodec_ctx->channels, data->audio_buffer + data->acodec_ctx->channels * data->audio_buffer_pos, sizeof(float) * to_send * data->acodec_ctx->channels);
 			// printf("Copy %i:%i from %i:%i\n", pcm_offset, pcm_offset + to_send, data->audio_buffer_pos, data->audio_buffer_pos + to_send);
 			pcm_offset += to_send;
 			num_samples -= to_send;
 			data->num_decoded_samples -= to_send;
 			data->audio_buffer_pos += to_send;
+			to_send_total += to_send;
 		}
 	}
 
-	return total_to_send;
+	if (print) {
+		double v_pts = data->frame_yuv->pts * av_q2d(data->format_ctx->streams[data->videostream_idx]->time_base);
+		double a_pts = data->audio_frame->pts * av_q2d(data->format_ctx->streams[data->audiostream_idx]->time_base);
+		double duration = (double)to_send / (double)data->audio_frame->sample_rate;
+		printf("\n\tds:%d send:%d t:%f at:%f (o:%f) vp:%f ap:%f + %f (o:%f) leftover dec:%d req_ns:%d goodtil:%ld\n",
+			data->num_decoded_samples, to_send_total, data->time, data->audio_time, data->time - data->audio_time,
+			v_pts, a_pts,
+			duration, v_pts - a_pts,
+			data->num_decoded_samples, num_samples, (uint64_t)(duration * 1000) + start);
+	}
+
+	return to_send_total;
 }
 
 godot_real godot_videodecoder_get_playback_position(const void *p_data) {
 	videodecoder_data_struct *data = (videodecoder_data_struct *)p_data;
 
 	if (data->format_ctx) {
-		if (data->frame_yuv->pts == AV_NOPTS_VALUE || !data->frame_pts_correct) {
+		bool use_v_pts = data->frame_yuv->pts != AV_NOPTS_VALUE && data->position_type == POS_V_PTS;
+		bool use_a_time = data->position_type == POS_A_TIME;
+		data->position_type = POS_TIME;
+
+		bool print = data->debug_audio > 0;
+		if (use_v_pts) {
+			double pts = (double)data->frame_yuv->pts;
+			double audio_offset = 0;// isnan(data->audio_time) ? 0 : data->time - data->audio_time;
+			pts *= av_q2d(data->format_ctx->streams[data->videostream_idx]->time_base);
+
+			if (print) printf("%ld get_playback_pos:V %f\n", get_ticks_msec(), pts + audio_offset);
+			return (godot_real)pts + audio_offset;
+		} else {
+			if (!isnan(data->audio_time) && use_a_time) {
+				if (print) printf("%ld get_playback_pos:A %f\n", get_ticks_msec(), data->audio_time);
+				return (godot_real)data->audio_time;
+			}
+			if (print) printf("%ld get_playback_pos:T %f\n", get_ticks_msec(), data->time);
 			return (godot_real)data->time;
 		}
-		double pts = (double)data->frame_yuv->pts;
-		pts *= av_q2d(data->format_ctx->streams[data->videostream_idx]->time_base);
-		return (godot_real)pts;
 	}
 	return (godot_real)0;
+}
+
+static void flush_frames(AVCodecContext* ctx) {
+	/**
+	* from https://www.ffmpeg.org/doxygen/4.1/group__lavc__encdec.html
+	* End of stream situations. These require "flushing" (aka draining) the codec, as the codec might buffer multiple frames or packets internally for performance or out of necessity (consider B-frames). This is handled as follows:
+	* Instead of valid input, send NULL to the avcodec_send_packet() (decoding) or avcodec_send_frame() (encoding) functions. This will enter draining mode.
+	* Call avcodec_receive_frame() (decoding) or avcodec_receive_packet() (encoding) in a loop until AVERROR_EOF is returned. The functions will not return AVERROR(EAGAIN), unless you forgot to enter draining mode.
+	* Before decoding can be resumed again, the codec has to be reset with avcodec_flush_buffers().
+	*/
+	int ret = avcodec_send_packet(ctx, NULL);
+	AVFrame frame = {0};
+	if (ret <= 0) {
+		do {
+			ret = avcodec_receive_frame(ctx, &frame);
+		} while (ret != AVERROR_EOF);
+	}
 }
 
 void godot_videodecoder_seek(void *p_data, godot_real p_time) {
@@ -819,21 +1044,32 @@ void godot_videodecoder_seek(void *p_data, godot_real p_time) {
 		p_time = _avtime_to_sec(data->format_ctx->duration);
 	}
 	int64_t seek_target = p_time * AV_TIME_BASE;
+	// seek within 10 seconds of the selected spot.
+	int64_t margin = 10 * AV_TIME_BASE;
 
 	// printf("seek(): %fs = %lld\n", p_time, seek_target);
-	int ret = avformat_seek_file(data->format_ctx, -1, INT64_MIN, seek_target, seek_target, AVSEEK_FLAG_BACKWARD);
+	int ret = avformat_seek_file(data->format_ctx, -1, seek_target - margin, seek_target, seek_target, 0);
+	if (ret < 0) {
+		api->godot_print_warning("avformat_seek_file() can't seek backward?", "godot_videodecoder_seek()\n", __FILE__, __LINE__);
+		ret = avformat_seek_file(data->format_ctx, -1, seek_target - margin, seek_target, seek_target + margin, 0);
+	}
 	if (ret < 0) {
 		api->godot_print_error("avformat_seek_file() failed", "godot_videodecoder_seek()\n", __FILE__, __LINE__);
 	} else {
 		packet_queue_flush(data->video_packet_queue);
 		packet_queue_flush(data->audio_packet_queue);
+		flush_frames(data->vcodec_ctx);
 		avcodec_flush_buffers(data->vcodec_ctx);
-		if (data->acodec_ctx)
+		if (data->acodec_ctx) {
+			flush_frames(data->acodec_ctx);
 			avcodec_flush_buffers(data->acodec_ctx);
+		}
 		data->num_decoded_samples = 0;
 		data->audio_buffer_pos = 0;
+		// if we aren't seeking to the end, use the actual keyframe time.
 		data->time = p_time;
-		data->frame_pts_correct = false;
+		data->position_type = POS_A_TIME;
+		data->audio_time = NAN;
 		printf("seek %f\n", p_time);
 	}
 }
