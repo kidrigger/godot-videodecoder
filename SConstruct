@@ -29,8 +29,7 @@ output_path = '#bin/' + env['platform'] + '/'
 if env['debug']:
     env.Append(CPPFLAGS=['-g'])
 
-if env['platform'] in ['x11', 'win64']:
-    env.Append(LIBPATH=[lib_path])
+env.Append(LIBPATH=[lib_path])
 if env['platform'] == 'x11':
     env.Append(RPATH=env.Literal('\$$ORIGIN'))
 
