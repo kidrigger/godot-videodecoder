@@ -795,9 +795,12 @@ retry:
 		av_packet_unref(&pkt);
 		goto retry;
 	}
-	if (!drop) {
+	if (!drop || fabs(data->seek_time - data->time) > data->diff_tolerance * 2) {
 		// Don't overwrite the current frame when dropping frames for performance reasons
+		// except when the time is within 2 frames of the most recent seek
 		// because we don't want a glitchy 'fast forward' effect when seeking.
+		// NOTE: VideoPlayer currently doesnt' ask for a frame when seeking while paused so you'd
+		// have to fake it inside godot by unpausing briefly. (see FIG1 below)
 		sws_scale(data->sws_ctx, (uint8_t const *const *)data->frame_yuv->data, data->frame_yuv->linesize, 0,
 				data->vcodec_ctx->height, data->frame_rgb->data, data->frame_rgb->linesize);
 
@@ -813,6 +816,34 @@ retry:
 	data->position_type = POS_TIME;
 	return &data->unwrapped_frame;
 }
+
+/*
+FIG1: how to seek while paused...
+
+var _paused_seeking = 0
+func seek_player(value):
+	var was_playing = _playing
+	if _playing:
+		stop()
+	_player.stream_position = value
+
+	if was_playing:
+		play(value)
+		if _player.paused || _paused_seeking > 0:
+			_player.paused = false
+			_paused_seeking = _paused_seeking + 1
+			# yes, it seems like 5 idle frames _is_ the magic number.
+			# VideoPlayer gets notified to do NOTIFICATION_INTERNAL_PROCESS on idle frames
+			# so this should always work?
+			for i in range(5):
+				yield(get_tree(), 'idle_frame')
+			# WARNING: -= double decrements here somehow?
+			_paused_seeking = _paused_seeking - 1
+			assert(_paused_seeking >= 0)
+			if _paused_seeking == 0:
+				_player.paused = true
+
+*/
 
 godot_int godot_videodecoder_get_audio(void *p_data, float *pcm, int pcm_remaining) {
 	videodecoder_data_struct *data = (videodecoder_data_struct *)p_data;
