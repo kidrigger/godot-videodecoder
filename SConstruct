@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import os
+from glob import glob
 
 opts = Variables()
 
@@ -36,19 +37,6 @@ if env['platform'] == 'x11':
 env.Append(CPPPATH=['#' + include_path + '/'])
 env.Append(CPPPATH=['#godot_include'])
 
-from glob import glob
-globs = {
-    'x11': '*.so.[0-9]*',
-    'win64': '../bin/*-[0-9]*.dll',
-    'osx': '*.[0-9]*.dylib'
-}
-
-ffmpeg_dylibs = glob(lib_path + '/' + globs[env['platform']])
-
-installed_dylib = []
-for dylib in ffmpeg_dylibs:
-    installed_dylib.append(env.Install(output_path,dylib))
-
 tool_prefix = ''
 if os.name == 'posix' and env['platform'] == 'win64':
     tool_prefix = "x86_64-w64-mingw32-"
@@ -62,6 +50,23 @@ if os.name == 'posix' and env['platform'] == 'osx':
     if (os.getenv("OSXCROSS_PREFIX")):
         tool_prefix = os.getenv('OSXCROSS_PREFIX')
     env['SHLIBSUFFIX'] = '.dylib'
+
+globs = {
+    'x11': '*.so.[0-9]*',
+    'win64': '../bin/*-[0-9]*.dll',
+    'osx': '*.[0-9]*.dylib'
+}
+
+ffmpeg_dylibs = glob(lib_path + '/' + globs[env['platform']])
+
+if env['platform'].startswith('win') and tool_prefix:
+    # mingw needs libwinpthread-1.dll which should be here. (remove trailing '-' from tool_prefix)
+    winpthread = '/usr/%s/lib/libwinpthread-1.dll' % tool_prefix[:-1]
+    ffmpeg_dylibs.append(winpthread)
+
+installed_dylib = []
+for dylib in ffmpeg_dylibs:
+    installed_dylib.append(env.Install(output_path,dylib))
 
 if tool_prefix:
     env['CC'] = tool_prefix + 'gcc'
@@ -95,7 +100,6 @@ if env['platform'] == 'osx':
 
 if env['prefix']:
     path = env['prefix'] + '/' + env['platform'] + '/'
-    print('PREFIX %s %s' % (path, output_dylib + ffmpeg_dylibs))
     Default(env.Install(path, ffmpeg_dylibs + output_dylib))
 elif env['test']:
     env.Install('#test/addons/' + output_path[1:], output_dylib + ffmpeg_dylibs)
