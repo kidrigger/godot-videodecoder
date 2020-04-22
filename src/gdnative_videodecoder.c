@@ -16,15 +16,13 @@
 #include "packet_queue.h"
 #include "set.h"
 
+#ifdef __APPLE__
+#include <mach-o/dyld.h>
+#include <mach/mach_time.h>
+#endif
+
 // TODO: is this sample rate defined somewhere in the godot api etc?
 #define AUDIO_MIX_RATE 22050
-
-// copied from godot's get_ticks_msec for os_unix
-#if defined(CLOCK_MONOTONIC_RAW) && !defined(JAVASCRIPT_ENABLED) // This is a better clock on Linux.
-#define GODOT_CLOCK CLOCK_MONOTONIC_RAW
-#else
-#define GODOT_CLOCK CLOCK_MONOTONIC
-#endif
 
 enum POSITION_TYPE {POS_V_PTS, POS_TIME, POS_A_TIME};
 typedef struct videodecoder_data_struct {
@@ -85,12 +83,38 @@ extern const godot_videodecoder_interface_gdnative plugin_interface;
 static const char *plugin_name = "ffmpeg_videoplayer";
 static int num_supported_ext = 0;
 static const char **supported_ext = NULL;
-static uint64_t _clock_start = 0;
 
-static uint64_t get_ticks_msec() {
+/// Clock Setup function (used by get_ticks_usec)
+static uint64_t _clock_start = 0;
+#if defined(__APPLE__)
+static double _clock_scale = 0;
+static void _setup_clock() {
+	mach_timebase_info_data_t info;
+	kern_return_t ret = mach_timebase_info(&info);
+	_clock_scale = ((double)info.numer / (double)info.denom) / 1.0e6L;
+	_clock_start = mach_absolute_time() * _clock_scale;
+}
+#else
+#if defined(CLOCK_MONOTONIC_RAW) && !defined(JAVASCRIPT_ENABLED) // This is a better clock on Linux.
+#define GODOT_CLOCK CLOCK_MONOTONIC_RAW
+#else
+#define GODOT_CLOCK CLOCK_MONOTONIC
+#endif
+static void _setup_clock() {
 	struct timespec tv_now = { 0, 0 };
 	clock_gettime(GODOT_CLOCK, &tv_now);
-	uint64_t longtime = ((uint64_t)tv_now.tv_nsec / 1.0e6L) + (uint64_t)tv_now.tv_sec * 1000L;
+	_clock_start = ((uint64_t)tv_now.tv_nsec / 1.0e6L) + (uint64_t)tv_now.tv_sec * 1000000L;
+}
+#endif
+
+static uint64_t get_ticks_msec() {
+	#if defined(__APPLE__)
+	uint64_t longtime = mach_absolute_time() * _clock_scale;
+	#else
+	struct timespec tv_now = { 0, 0 };
+	clock_gettime(GODOT_CLOCK, &tv_now);
+	uint64_t longtime = ((uint64_t)tv_now.tv_nsec / 1.0e6L) + (uint64_t)tv_now.tv_sec * 1.0e6L;
+	#endif
 	longtime -= _clock_start;
 
 	return longtime;
@@ -312,7 +336,7 @@ static void print_codecs() {
 }
 
 void GDN_EXPORT godot_gdnative_init(godot_gdnative_init_options *p_options) {
-	_clock_start = get_ticks_msec();
+	_setup_clock();
 	api = p_options->api_struct;
 
 	for (int i = 0; i < api->num_extensions; i++) {
