@@ -63,11 +63,13 @@ typedef struct videodecoder_data_struct {
 	unsigned long drop_frame;
 	unsigned long total_frame;
 
+	double seek_time;
+
 	enum POSITION_TYPE position_type;
 	uint8_t *io_buffer;
 	godot_bool vcodec_open;
 	godot_bool input_open;
-	double seek_time;
+	bool frame_unwrapped;
 
 } videodecoder_data_struct;
 
@@ -403,7 +405,7 @@ void *godot_videodecoder_constructor(godot_object *p_instance) {
 	data->time = 0;
 	data->audio_time = NAN;
 
-
+	data->frame_unwrapped = false;
 	api->godot_pool_byte_array_new(&data->unwrapped_frame);
 
 	return data;
@@ -801,9 +803,9 @@ retry:
 		// because we don't want a glitchy 'fast forward' effect when seeking.
 		// NOTE: VideoPlayer currently doesnt' ask for a frame when seeking while paused so you'd
 		// have to fake it inside godot by unpausing briefly. (see FIG1 below)
+		data->frame_unwrapped = true;
 		sws_scale(data->sws_ctx, (uint8_t const *const *)data->frame_yuv->data, data->frame_yuv->linesize, 0,
 				data->vcodec_ctx->height, data->frame_rgb->data, data->frame_rgb->linesize);
-
 		_unwrap_video_frame(&data->unwrapped_frame, data->frame_rgb, data->vcodec_ctx->width, data->vcodec_ctx->height);
 	}
 	av_packet_unref(&pkt);
@@ -814,7 +816,7 @@ retry:
 	// keeps calling get_texture() until the time matches
 	// we don't need this behavior as we already handle frame skipping internally.
 	data->position_type = POS_TIME;
-	return &data->unwrapped_frame;
+	return data->frame_unwrapped ? &data->unwrapped_frame : NULL;
 }
 
 /*
