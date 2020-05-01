@@ -78,6 +78,7 @@ const godot_int AUDIO_BUFFER_MAX_SIZE = 192000;
 
 const godot_gdnative_core_api_struct *api = NULL;
 const godot_gdnative_ext_nativescript_api_struct *nativescript_api = NULL;
+const godot_gdnative_ext_nativescript_1_1_api_struct *nativescript_api_1_1 = NULL;
 const godot_gdnative_ext_videodecoder_api_struct *videodecoder_api = NULL;
 
 extern const godot_videodecoder_interface_gdnative plugin_interface;
@@ -93,7 +94,7 @@ static double _clock_scale = 0;
 static void _setup_clock() {
 	mach_timebase_info_data_t info;
 	kern_return_t ret = mach_timebase_info(&info);
-	_clock_scale = ((double)info.numer / (double)info.denom) / 1.0e6L;
+	_clock_scale = ((double)info.numer / (double)info.denom) / 1000.0;
 	_clock_start = mach_absolute_time() * _clock_scale;
 }
 #else
@@ -105,22 +106,35 @@ static void _setup_clock() {
 static void _setup_clock() {
 	struct timespec tv_now = { 0, 0 };
 	clock_gettime(GODOT_CLOCK, &tv_now);
-	_clock_start = ((uint64_t)tv_now.tv_nsec / 1.0e6L) + (uint64_t)tv_now.tv_sec * 1000000L;
+	_clock_start = ((uint64_t)tv_now.tv_nsec / 1000L) + (uint64_t)tv_now.tv_sec * 1000000L;
 }
 #endif
 
-static uint64_t get_ticks_msec() {
+static uint64_t get_ticks_usec() {
 	#if defined(__APPLE__)
 	uint64_t longtime = mach_absolute_time() * _clock_scale;
 	#else
 	struct timespec tv_now = { 0, 0 };
 	clock_gettime(GODOT_CLOCK, &tv_now);
-	uint64_t longtime = ((uint64_t)tv_now.tv_nsec / 1.0e6L) + (uint64_t)tv_now.tv_sec * 1.0e6L;
+	uint64_t longtime = ((uint64_t)tv_now.tv_nsec / 1000L) + (uint64_t)tv_now.tv_sec * 1000000L;
 	#endif
 	longtime -= _clock_start;
 
 	return longtime;
 }
+
+static uint64_t get_ticks_msec() {
+	return get_ticks_usec() / 1000L;
+}
+
+#define STRINGIFY(x) #x
+#define PROFILE_START(sig, line) const char __profile_sig__[] = "gdnative_videodecoder.c::" STRINGIFY(line) "::" sig; \
+	uint64_t __profile_ticks_start__ = get_ticks_usec()
+
+#define PROFILE_END if (nativescript_api_1_1) \
+	nativescript_api_1_1->godot_nativescript_profiling_add_data( \
+	__profile_sig__, get_ticks_usec() - __profile_ticks_start__ \
+)
 
 // Cleanup should empty the struct to the point where you can open a new file from.
 static void _cleanup(videodecoder_data_struct *data) {
@@ -337,17 +351,30 @@ static void print_codecs() {
 	}
 }
 
+inline static bool api_ver(godot_gdnative_api_version v, unsigned int want_major, unsigned int want_minor) {
+	return v.major == want_major && v.minor == want_minor;
+}
+
+
 void GDN_EXPORT godot_gdnative_init(godot_gdnative_init_options *p_options) {
 	_setup_clock();
 	api = p_options->api_struct;
-
 	for (int i = 0; i < api->num_extensions; i++) {
 		switch (api->extensions[i]->type) {
 			case GDNATIVE_EXT_VIDEODECODER:
 				videodecoder_api = (godot_gdnative_ext_videodecoder_api_struct *)api->extensions[i];
+
 				break;
 			case GDNATIVE_EXT_NATIVESCRIPT:
 				nativescript_api = (godot_gdnative_ext_nativescript_api_struct *)api->extensions[i];
+				godot_gdnative_api_struct *ext_next = nativescript_api->next;
+				while (ext_next) {
+					if (api_ver(ext_next->version, 1, 1)) {
+						nativescript_api_1_1 = (godot_gdnative_ext_nativescript_1_1_api_struct *)ext_next;
+						break;
+					}
+					ext_next = ext_next->next;
+				}
 				break;
 			default: break;
 		}
@@ -713,6 +740,7 @@ static bool read_frame(videodecoder_data_struct *data) {
 }
 
 void godot_videodecoder_update(void *p_data, godot_real p_delta) {
+	PROFILE_START("update", __LINE__);
 	videodecoder_data_struct *data = (videodecoder_data_struct *)p_data;
 	// during an 'update' make sure to use the video frame's pts timestamp
 	// otherwise the godot VideoStreamNative update method
@@ -732,13 +760,16 @@ void godot_videodecoder_update(void *p_data, godot_real p_delta) {
 }
 
 godot_pool_byte_array *godot_videodecoder_get_videoframe(void *p_data) {
+	PROFILE_START("get_videoframe", __LINE__);
 	videodecoder_data_struct *data = (videodecoder_data_struct *)p_data;
 	AVPacket pkt = {0};
 	int ret;
 	size_t drop_count = 0;
 	// to maintain a decent game frame rate
 	// don't let frame decoding take more than this number of ms
-	uint64_t max_frame_drop_time = 10;
+	uint64_t max_frame_drop_time = 5;
+	// but we do need to drop frames, so try to drop at least some frames even if it's a bit slow :(
+	size_t min_frame_drop_count = 5;
 	uint64_t start = get_ticks_msec();
 
 retry:
@@ -747,8 +778,10 @@ retry:
 		// need to call avcodedc_send_packet, get a packet from queue to send it
 		while (!packet_queue_get(data->video_packet_queue, &pkt)) {
 			//api->godot_print_warning("video packet queue empty", "godot_videodecoder_get_videoframe()", __FILE__, __LINE__);
-			if (!read_frame(data))
+			if (!read_frame(data)) {
+				PROFILE_END;
 				return NULL;
+			}
 		}
 		ret = avcodec_send_packet(data->vcodec_ctx, &pkt);
 		if (ret < 0) {
@@ -758,6 +791,7 @@ retry:
 			snprintf(msg, sizeof(msg) - 1, "avcodec_send_packet returns %d (%s)", ret, err);
 			api->godot_print_error(msg, "godot_videodecoder_get_videoframe()", __FILE__, __LINE__);
 			av_packet_unref(&pkt);
+			PROFILE_END;
 			return NULL;
 		}
 		av_packet_unref(&pkt);
@@ -766,6 +800,7 @@ retry:
 		char msg[512] = {0};
 		snprintf(msg, sizeof(msg) - 1, "avcodec_receive_frame returns %d", ret);
 		api->godot_print_error(msg, "godot_videodecoder_get_videoframe()", __FILE__, __LINE__);
+		PROFILE_END;
 		return NULL;
 	}
 
@@ -780,11 +815,12 @@ retry:
 	// let's discard this frame and get the next frame instead
 	bool drop = ts < data->time - data->diff_tolerance;
 	uint64_t drop_duration = get_ticks_msec() - start;
-	if (drop && drop_duration > max_frame_drop_time) {
+	if (drop && drop_duration > max_frame_drop_time && drop_count < min_frame_drop_count) {
 		// only discard frames for max_frame_drop_time ms or we'll slow down the game's main thread!
 		if (fabs(data->seek_time - data->time) > data->diff_tolerance * 10) {
 			char msg[512];
-			snprintf(msg, sizeof(msg) -1, "Slow CPU? Dropped frames for %ldms frame dropped last: %ld/%ld (%.1f%%) pts=%.1f t=%.1f",
+			snprintf(msg, sizeof(msg) -1, "Slow CPU? Dropped  %d frames for %ldms frame dropped: %ld/%ld (%.1f%%) pts=%.1f t=%.1f",
+				(int)drop_count,
 				drop_duration,
 				data->drop_frame,
 				data->total_frame,
@@ -793,6 +829,7 @@ retry:
 			api->godot_print_warning(msg, "godot_videodecoder_get_videoframe()", __FILE__, __LINE__);
 		}
 	} else if (drop) {
+		drop_count++;
 		data->drop_frame++;
 		av_packet_unref(&pkt);
 		goto retry;
@@ -816,6 +853,7 @@ retry:
 	// keeps calling get_texture() until the time matches
 	// we don't need this behavior as we already handle frame skipping internally.
 	data->position_type = POS_TIME;
+	PROFILE_END;
 	return data->frame_unwrapped ? &data->unwrapped_frame : NULL;
 }
 
@@ -848,8 +886,10 @@ func seek_player(value):
 */
 
 godot_int godot_videodecoder_get_audio(void *p_data, float *pcm, int pcm_remaining) {
+	PROFILE_START("get_audio", __LINE__);
 	videodecoder_data_struct *data = (videodecoder_data_struct *)p_data;
 	if (data->audiostream_idx < 0) {
+		PROFILE_END;
 		return 0;
 	}
 	bool first_frame = true;
@@ -867,6 +907,7 @@ godot_int godot_videodecoder_get_audio(void *p_data, float *pcm, int pcm_remaini
 	if (audio_reset && data->num_decoded_samples > 0) {
 		// don't send any pcm data if the frame hasn't started yet
 		if (p_time > data->time) {
+			PROFILE_END;
 			return 0;
 		}
 		// skip the any decoded samples if their presentation timestamp is too old
@@ -898,6 +939,7 @@ retry_audio:
 						// if we haven't got any on-time audio yet, then the audio_time counter is meaningless.
 						data->audio_time = NAN;
 					}
+					PROFILE_END;
 					return pcm_offset;
 				}
 				ret = avcodec_send_packet(data->acodec_ctx, &pkt);
@@ -906,6 +948,7 @@ retry_audio:
 					snprintf(msg, sizeof(msg) -1, "avcodec_send_packet returns %d", ret);
 					api->godot_print_error(msg, "godot_videodecoder_get_audio()", __FILE__, __LINE__);
 					av_packet_unref(&pkt);
+					PROFILE_END;
 					return pcm_offset;
 				}
 				av_packet_unref(&pkt);
@@ -914,6 +957,7 @@ retry_audio:
 				char msg[512];
 				snprintf(msg, sizeof(msg) - 1, "avcodec_receive_frame returns %d", ret);
 				api->godot_print_error(msg, "godot_videodecoder_get_audio()", __FILE__, __LINE__);
+				PROFILE_END;
 				return pcm_buffer_size - pcm_remaining;
 			}
 			// only set the audio frame time if this is the first frame we've decoded during this update.
@@ -948,6 +992,7 @@ retry_audio:
 		}
 	}
 
+	PROFILE_END;
 	return pcm_offset;
 }
 
@@ -974,6 +1019,7 @@ godot_real godot_videodecoder_get_playback_position(const void *p_data) {
 }
 
 static void flush_frames(AVCodecContext* ctx) {
+	PROFILE_START("flush_frames", __LINE__);
 	/**
 	* from https://www.ffmpeg.org/doxygen/4.1/group__lavc__encdec.html
 	* End of stream situations. These require "flushing" (aka draining) the codec, as the codec might buffer multiple frames or packets internally for performance or out of necessity (consider B-frames). This is handled as follows:
@@ -988,9 +1034,11 @@ static void flush_frames(AVCodecContext* ctx) {
 			ret = avcodec_receive_frame(ctx, &frame);
 		} while (ret != AVERROR_EOF);
 	}
+	PROFILE_END;
 }
 
 void godot_videodecoder_seek(void *p_data, godot_real p_time) {
+	PROFILE_START("seek", __LINE__);
 	videodecoder_data_struct *data = (videodecoder_data_struct *)p_data;
 	// Hack to find the end of the video. Really VideoPlayer should expose this!
 	if (p_time < 0) {
@@ -1025,6 +1073,7 @@ void godot_videodecoder_seek(void *p_data, godot_real p_time) {
 		data->position_type = POS_A_TIME;
 		data->audio_time = NAN;
 	}
+	PROFILE_END;
 }
 
 /* ---------------------- TODO ------------------------- */
