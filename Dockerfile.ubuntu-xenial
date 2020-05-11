@@ -1,0 +1,52 @@
+FROM ubuntu:xenial
+
+#build environment for ubuntu with older glibc
+ENV DEBIAN_FRONTEND=noninteractive
+ARG JOBS
+
+# from Dockerfile-ubuntu-64
+#RUN apt-get update && \
+#    apt-get -y install wget && \
+#    cd /root && \
+#     wget -O- 'https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x1E9377A2BA9EF27F' | apt-key add - && \
+#     wget -O- 'https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x8E51A6D660CD88D67D65221D90BD7EACED8E640A' | apt-key add - && \
+#     echo 'deb http://ppa.launchpad.net/ubuntu-toolchain-r/test/ubuntu trusty main' >> /etc/apt/sources.list && \
+#     echo 'deb http://ppa.launchpad.net/mc3man/trusty-media/ubuntu trusty main' >> /etc/apt/sources.list
+
+# godot deps
+RUN apt update && \
+    apt install -y build-essential scons pkg-config libx11-dev libxcursor-dev libxinerama-dev \
+    libgl1-mesa-dev libglu-dev libasound2-dev libpulse-dev libudev-dev libxi-dev libxrandr-dev yasm
+# ffmpeg deps: may be some duplicates
+RUN apt install -y autoconf \
+  build-essential curl tar pkg-config \
+  automake \
+  build-essential \
+  cmake \
+  frei0r-plugins-dev \
+  gawk \
+  libass-dev \
+  libfreetype6-dev \
+  libopencore-amrnb-dev \
+  libopencore-amrwb-dev \
+  libsdl1.2-dev \
+  libspeex-dev \
+  libssl-dev \
+  libtheora-dev \
+  libtool \
+  libva-dev \
+  libvdpau-dev \
+  libvo-amrwbenc-dev \
+  libvorbis-dev \
+  libwebp-dev \
+  libxcb1-dev \
+  libxcb-shm0-dev \
+  libxcb-xfixes0-dev \
+  libxvidcore-dev \
+  pkg-config \
+  texi2html \
+  zlib1g-dev \
+  mingw-w64-tools \
+  wget
+
+RUN apt install -y ocl-icd-opencl-dev

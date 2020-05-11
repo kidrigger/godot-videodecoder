@@ -7,3 +7,6 @@
 [submodule "ffmpeg-static"]
 	path = ffmpeg-static
 	url = https://github.com/jamie-pate/ffmpeg-static.git
+[submodule "build-containers"]
+	path = build-containers
+	url = https://github.com/godotengine/build-containers.git

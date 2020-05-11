@@ -1,0 +1,20 @@
+FROM godot-videodecoder-ubuntu-xenial
+
+WORKDIR /opt/godot-videodecoder/ffmpeg-static
+COPY ./ffmpeg-static .
+
+ENV TARGET_DIR=/opt/target
+ENV THIRDPARTY_DIR=/opt/godot-videodecoder/thirdparty
+ENV OSXCROSS_BIN_DIR=/opt/osxcross/target/bin
+ENV PLUGIN_BIN_DIR=/opt/godot-videodecoder/bin
+ARG JOBS=1
+
+RUN pwd && ls && ./build.sh -d
+COPY ./ffmpeg-static/build.sh ./
+RUN pwd && ls && ./build.sh -B -T "$THIRDPARTY_DIR/x11" -j $JOBS
+WORKDIR /opt/godot-videodecoder
+
+COPY . .
+RUN scons -c platform=x11
+RUN scons platform=x11 prefix="${TARGET_DIR}"
+RUN ldd /opt/target/x11/libgdnative_videodecoder.so
