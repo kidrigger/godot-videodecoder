@@ -1,5 +1,11 @@
 #! /bin/bash
 
+# For osx you must download XCode 7 and extract/generate ./thirdparty/MacOSX10.11.sdk.tar.gz
+# by following these instructions: https://github.com/tpoechtrager/osxcross#packaging-the-sdk
+# NOTE: for darwin15 support use: https://developer.apple.com/download/more/?name=Xcode%207.3.1
+# To use a different MacOSX*.*.sdk.tar.gz sdk set XCODE_SDK
+# e.g. XCODE_SDK=$PWD/thirdparty/MacOSX10.15.sdk.tar.gz ./build_gdnative.sh
+
 # usage: ADDON_BIN_DIR=$PWD/godot/addons/bin ./contrib/godot-videodecoder/build_gdnative.sh
 # (from within your project where this is a submodule installed at ./contrib/godot-videodecoder/build_gdnative.sh/)
 
@@ -8,42 +14,50 @@
 # http://docs.godotengine.org/en/3.2/development/compiling/compiling_for_windows.html#cross-compiling-for-windows-from-other-operating-systems
 # http://docs.godotengine.org/en/3.2/development/compiling/compiling_for_osx.html#cross-compiling-for-macos-from-linux
 
-# NOTE: use XCode 7 for darwin15 support: https://developer.apple.com/download/more/?name=Xcode%207.3.1
 
-# cp contrib/MacOSX10.*.sdk.tar.gz ~/src/osxcross/tarballs
 # cd ~/src/osxcross; ./build.sh && ./build_gcc.sh
 # https://docs.godotengine.org/en/3.2/tutorials/plugins/gdnative/gdnative-c-example.html
 
 DIR="$(cd $(dirname "$0") && pwd)"
 ADDON_BIN_DIR=${ADDON_BIN_DIR:-$DIR/target}
+XCODE_SDK="${XCODE_SDK:-$DIR/thirdparty/MacOSX10.11.sdk.tar.xz}"
 JOBS=$(echo "$(cat /proc/cpuinfo  | grep processor |wc -l) - 1" |  bc -l)
 #img_version="$(git describe 2>/dev/null || git rev-parse HEAD)"
 # TODO : pass in img_version like https://github.com/godotengine/build-containers/blob/master/Dockerfile.osx#L1
 # trusty is for linux builds
-
-docker build ./ -f Dockerfile.ubuntu-xenial -t "godot-videodecoder-ubuntu-xenial" &
-#docker build ./ -f Dockerfile.ubuntu-bionic -t "godot-videodecoder-ubuntu-bionic" &
-wait
+echo "XCODE_SDK=$XCODE_SDK"
+if [ ! -f "$XCODE_SDK" ]; then
+    ls -l "$XCODE_SDK"
+    echo "Unable to find $XCODE_SDK"
+    exit 1
+fi
+docker build ./ -f Dockerfile.ubuntu-xenial -t "godot-videodecoder-ubuntu-xenial"
+docker build ./ -f Dockerfile.ubuntu-bionic -t "godot-videodecoder-ubuntu-bionic" --build-arg XCODE_SDK=$XCODE_SDK
 
 set -e
 # bionic is for cross compiles, use xenial for linux
 # (for ubuntu 16 compatibility even though it's outdated already)
-#docker build ./ -f Dockerfile.osx --build-arg JOBS=$JOBS -t "godot-videodecoder-osx" &
+docker build ./ -f Dockerfile.osx --build-arg JOBS=$JOBS -t "godot-videodecoder-osx" &
 docker build ./ -f Dockerfile.x11 --build-arg JOBS=$JOBS -t "godot-videodecoder-x11" &
 #docker build ./ -f Dockerfile.win64 -t "godot-videodecoder-win64"
+jobs
+wait
+jobs
 
+echo "extracting $ADDON_BIN_DIR/x11"
 id=$(docker create godot-videodecoder-x11)
-docker cp $id:/opt/target/x11 $ADDON_BIN_DIR/x11/
+docker cp $id:/opt/target/x11 $ADDON_BIN_DIR/
+docker rm -v $id
+
+echo "extracting $ADDON_BIN_DIR/osx"
+id=$(docker create godot-videodecoder-osx)
+docker cp $id:/opt/target/osx $ADDON_BIN_DIR/
 docker rm -v $id
 
 exit 0
 
-id=$(docker create godot-videodecoder-osx)
-docker cp $id:/opt/target/osx $ADDON_BIN_DIR/osx/
-docker rm -v $id
-
 id=$(docker create godot-videodecoder-win64)
-docker cp $id:/opt/target/win64 $ADDON_BIN_DIR/win64/
+docker cp $id:/opt/target/win64 $ADDON_BIN_DIR/
 docker rm -v $id
 
 # TODO: remove below
