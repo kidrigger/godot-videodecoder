@@ -367,7 +367,7 @@ void GDN_EXPORT godot_gdnative_init(godot_gdnative_init_options *p_options) {
 				break;
 			case GDNATIVE_EXT_NATIVESCRIPT:
 				nativescript_api = (godot_gdnative_ext_nativescript_api_struct *)api->extensions[i];
-				godot_gdnative_api_struct *ext_next = nativescript_api->next;
+				const godot_gdnative_api_struct *ext_next = nativescript_api->next;
 				while (ext_next) {
 					if (api_ver(ext_next->version, 1, 1)) {
 						nativescript_api_1_1 = (godot_gdnative_ext_nativescript_1_1_api_struct *)ext_next;
