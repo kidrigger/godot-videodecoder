@@ -15,11 +15,16 @@ RUN apt-get update && \
     zlib1g-dev libmpc-dev libmpfr-dev libgmp-dev libc++-dev \
     libssl-dev curl bc wget \
     autoconf automake libtool make yasm nasm \
-    scons
+    scons mingw-w64 mingw-w64-tools
+
+# use posix variant of mingw
+RUN update-alternatives --set x86_64-w64-mingw32-gcc /usr/bin/x86_64-w64-mingw32-gcc-posix
+RUN update-alternatives --set x86_64-w64-mingw32-g++ /usr/bin/x86_64-w64-mingw32-g++-posix
 
 RUN git clone --depth=1 https://github.com/tpoechtrager/osxcross.git /opt/osxcross
+
 # TODO: ln this from a volume instead?
-COPY $XCODE_SDK /opt/osxcross/tarballs
+COPY ./darwin_sdk/* /opt/osxcross/tarballs
 
 RUN cmake --version
 RUN cd /opt/osxcross && UNATTENDED=1 ./build.sh

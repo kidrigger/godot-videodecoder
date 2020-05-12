@@ -20,7 +20,9 @@
 
 DIR="$(cd $(dirname "$0") && pwd)"
 ADDON_BIN_DIR=${ADDON_BIN_DIR:-$DIR/target}
-XCODE_SDK="${XCODE_SDK:-$DIR/thirdparty/MacOSX10.11.sdk.tar.xz}"
+# COPY can't use variables, so pre-copy the file
+XCODE_SDK_FOR_COPY=./darwin_sdk/MacOSX10.11.sdk.tar.xz
+XCODE_SDK="${XCODE_SDK:-$XCODE_SDK_FOR_COPY}"
 JOBS=$(echo "$(cat /proc/cpuinfo  | grep processor |wc -l) - 1" |  bc -l)
 #img_version="$(git describe 2>/dev/null || git rev-parse HEAD)"
 # TODO : pass in img_version like https://github.com/godotengine/build-containers/blob/master/Dockerfile.osx#L1
@@ -31,18 +33,21 @@ if [ ! -f "$XCODE_SDK" ]; then
     echo "Unable to find $XCODE_SDK"
     exit 1
 fi
-docker build ./ -f Dockerfile.ubuntu-xenial -t "godot-videodecoder-ubuntu-xenial"
-docker build ./ -f Dockerfile.ubuntu-bionic -t "godot-videodecoder-ubuntu-bionic" --build-arg XCODE_SDK=$XCODE_SDK
+if [ "$XCODE_SDK" -ne "$XCODE_SDK_FOR_COPY" ]; then
+    mkdir -p $(dirname "$XCODE_SDK_FOR_COPY")
+    cp "$XCODE_SDK" "$XCODE_SDK_FOR_COPY"
+fi
 
 set -e
+docker build ./ -f Dockerfile.ubuntu-xenial -t "godot-videodecoder-ubuntu-xenial"
+docker build ./ -f Dockerfile.ubuntu-bionic -t "godot-videodecoder-ubuntu-bionic" \
+    --build-arg XCODE_SDK=$XCODE_SDK
+
 # bionic is for cross compiles, use xenial for linux
 # (for ubuntu 16 compatibility even though it's outdated already)
-docker build ./ -f Dockerfile.osx --build-arg JOBS=$JOBS -t "godot-videodecoder-osx" &
-docker build ./ -f Dockerfile.x11 --build-arg JOBS=$JOBS -t "godot-videodecoder-x11" &
-#docker build ./ -f Dockerfile.win64 -t "godot-videodecoder-win64"
-jobs
-wait
-jobs
+docker build ./ -f Dockerfile.osx --build-arg JOBS=$JOBS -t "godot-videodecoder-osx"
+docker build ./ -f Dockerfile.x11 --build-arg JOBS=$JOBS -t "godot-videodecoder-x11"
+docker build ./ -f Dockerfile.win64 --build-arg JOBS=$JOBS -t "godot-videodecoder-win64"
 
 echo "extracting $ADDON_BIN_DIR/x11"
 id=$(docker create godot-videodecoder-x11)
@@ -54,12 +59,11 @@ id=$(docker create godot-videodecoder-osx)
 docker cp $id:/opt/target/osx $ADDON_BIN_DIR/
 docker rm -v $id
 
-exit 0
-
 id=$(docker create godot-videodecoder-win64)
 docker cp $id:/opt/target/win64 $ADDON_BIN_DIR/
 docker rm -v $id
 
+exit 0
 # TODO: remove below
 # TODO: make this more portable?
 OSXCROSS_BIN_DIR=$HOME/src/osxcross/target/bin
