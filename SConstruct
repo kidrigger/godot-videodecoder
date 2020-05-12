@@ -33,6 +33,8 @@ if env['debug']:
 env.Append(LIBPATH=[lib_path])
 if env['platform'] == 'x11':
     env.Append(RPATH=env.Literal('\$$ORIGIN'))
+    # statically link glibc
+    env.Append(LIBS=[File('/usr/lib/x86_64-linux-gnu/libc_nonshared.a')])
 
 env.Append(CPPPATH=['#' + include_path + '/'])
 env.Append(CPPPATH=['#godot_include'])
