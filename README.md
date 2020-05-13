@@ -5,9 +5,12 @@ using the [FFmpeg](https://ffmpeg.org) library for codecs.
 
 **A GSoC 2018 Project**
 
-## Instructions to use the test project
+This project is set up so that a game developer can build x11, windows and osx plugin libraries with a single script. The build enviroment has been dockerized for portability. Building has been tested on macos (catalina) and linux.
 
-<!-- Ideally this would all be set up to build in a docker container, but I ran out of time -->
+The most difficult part of building the plugin libraries is extracting the macos sdk from the XCode download since it [can't be distributed directly](https://www.apple.com/legal/sla/docs/xcode.pdf).
+
+## Instructions to build with docker
+
 1. Add the repository as a submodule or clone the repository somewhere and initialize submodules.
 
 ```
@@ -19,39 +22,28 @@ or
 
 ```
 git clone https://github.com/jamie-pate/godot-videodecoder.git godot-videodecoder
-cd contrib/godot-videodecoder
+cd godot-videodecoder
 git submodule update --init --recursive
 ```
 
-2. Add FFmpeg submodule in another folder.
-
-```
-git submodule add https://github.com/jamie-pate/ffmpeg-static.git contrib/ffmpeg-static
-git submodule update --init --recursive
-```
-
-or
-
-```
-git clone https://github.com/jamie-pate/ffmpeg-static.git
-```
-
-3. Copy the `build_gdnative.sh.example` to your project and adjust the paths inside.
-<!-- this step needs improvement -->
+2. Copy the `build_gdnative.sh.example` to your project and adjust the paths inside.
 
 * `cp contrib/godot-videodecoder/build_gdnative.sh.example ./build_gdnative.sh`, vi `./build_gdnative.sh`
 * `chmod +x ./build_gdnative.sh` if needed
 
-4. Install dependencies
+4. [Install docker](https://docs.docker.com/get-docker/)
 
-* `cd contrib/ffmpeg-static; ./install-ubuntu-deps.sh` -- This should install many required dependencies.
-<!-- but might not be 100% complete -->
-* make sure you are set up to cross compile godot and plugins:
-* http://docs.godotengine.org/en/3.2/development/compiling/compiling_for_x11.html
-* http://docs.godotengine.org/en/3.2/development/compiling/compiling_for_windows.html#cross-compiling-for-windows-from-other-operating-systems
-* http://docs.godotengine.org/en/3.2/development/compiling/compiling_for_osx.html#cross-compiling-for-macos-from-linux
-   * NOTE: use XCode 7 for darwin15 support: https://developer.apple.com/download/more/?name=Xcode%207.3.1
+5. Extract MacOSX sdk from the XCode
 
-5. then run `./build_gdnative.sh`
+* For osx you must download XCode 7 and extract/generate MacOSX10.11.sdk.tar.gz and copy it to ./darwin_sdk/ by following these instructions: https://github.com/tpoechtrager/osxcross#packaging-the-sdk
+  * NOTE: for darwin15 support use: https://developer.apple.com/download/more/?name=Xcode%207.3.1
+* To use a different MacOSX*.*.sdk.tar.gz sdk set the XCODE_SDK environment variable. <!-- TODO: test this -->
+* e.g. `XCODE_SDK=$PWD/darwin_sdk/MacOSX10.15.sdk.tar.gz ./build_gdnative.sh`
 
-If you adjusted the paths correctly it should have created `addons/bin/(x11|win64|osx)` which should be full of libraries. You should copy `godot-videodecoder/test/addons/videodecoder.gdnlib` to your `addons` directory and make any changes you need.
+5. run `build_gdnative.sh`
+
+TODO:
+
+* instructions for running the test project
+* Add a benchmark to the test project
+* Input for additional ffmpeg flags/deps
