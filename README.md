@@ -41,6 +41,7 @@ git submodule update --init --recursive
 * e.g. `XCODE_SDK=$PWD/darwin_sdk/MacOSX10.15.sdk.tar.gz ./build_gdnative.sh`
 
 5. run `build_gdnative.sh`
+* On linux you should run `sudo build_gdnative.sh`
 
 TODO:
 
