@@ -89,7 +89,7 @@ extern const godot_videodecoder_interface_gdnative plugin_interface;
 
 static const char *plugin_name = "ffmpeg_videoplayer";
 static int num_supported_ext = 0;
-static const char **supported_ext = NULL;
+static char **supported_ext = NULL;
 
 /// Clock Setup function (used by get_ticks_usec)
 static uint64_t _clock_start = 0;
@@ -340,7 +340,7 @@ static void _update_extensions() {
 
 	list_t ext_list = set_create_list(sup_ext_set);
 	num_supported_ext = list_size(&ext_list);
-	supported_ext = (const char **)api->godot_alloc(sizeof(char *) * num_supported_ext);
+	supported_ext = (char **)api->godot_alloc(sizeof(char *) * num_supported_ext);
 	list_node_t *cur_node = ext_list.start;
 	int i = 0;
 	while (cur_node != NULL) {
@@ -865,7 +865,7 @@ retry:
 		// only discard frames for max_frame_drop_time ms or we'll slow down the game's main thread!
 		if (fabs(data->seek_time - data->time) > data->diff_tolerance * 10) {
 			char msg[512];
-			snprintf(msg, sizeof(msg) -1, "Slow CPU? Dropped  %d frames for %ldms frame dropped: %ld/%ld (%.1f%%) pts=%.1f t=%.1f",
+			snprintf(msg, sizeof(msg) -1, "Slow CPU? Dropped  %d frames for %"PRId64"ms frame dropped: %lu/%lu (%.1f%%) pts=%.1f t=%.1f",
 				(int)drop_count,
 				drop_duration,
 				data->drop_frame,
