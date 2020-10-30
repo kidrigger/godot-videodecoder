@@ -36,7 +36,7 @@ if env['toolchainbin']:
     env.PrependENVPath('PATH', env['toolchainbin'])
 output_path = '#bin/' + env['platform'] + '/'
 
-if env['debug'] and msvc_build:
+if env['debug'] and not msvc_build:
     env.Append(CPPFLAGS=['-g'])
 
 env.Append(LIBPATH=[lib_path])

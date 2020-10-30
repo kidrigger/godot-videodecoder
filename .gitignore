@@ -9,3 +9,4 @@ thirdparty/
 .test/addons/bin
 *.obj
 *.dll
+/target
