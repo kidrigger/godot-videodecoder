@@ -17,17 +17,26 @@ opts.Add(EnumVariable('darwinver', 'Darwin SDK version. (if cross compiling from
 #probably a better way to do this instead of creating Enviroment() twice
 early_env=Environment(variables=opts, BUILDERS={})
 lib_prefix = early_env['thirdparty'] + '/' + early_env['platform']
-lib_path = lib_prefix + '/lib'
+
+msvc_build = os.name == 'nt'
+if msvc_build:
+    lib_path = lib_prefix + '/bin'
+else:
+    lib_path = lib_prefix + '/lib'
 include_path = lib_prefix + '/include'
 # probably a better way to do this too (pass $TOOL_PREFIX)
-osx_renamer = Builder(action = './renamer.py ' + os.environ.get('PWD') + '/' + lib_path + '/ @loader_path/ "$TOOL_PREFIX" $SOURCE', )
-env = Environment(variables=opts, BUILDERS={'OSXRename':osx_renamer}, CFLAGS='-std=gnu11')
+# PWD is not present in windows
+pwd = os.environ.get('PWD') or os.getcwd()
+
+osx_renamer = Builder(action = './renamer.py ' + pwd + '/' + lib_path + '/ @loader_path/ "$TOOL_PREFIX" $SOURCE', )
+
+env = Environment(variables=opts, BUILDERS={'OSXRename':osx_renamer}, CFLAGS='' if msvc_build else '-std=gnu11', TARGET_ARCH='x86_64')
 
 if env['toolchainbin']:
     env.PrependENVPath('PATH', env['toolchainbin'])
 output_path = '#bin/' + env['platform'] + '/'
 
-if env['debug']:
+if env['debug'] and msvc_build:
     env.Append(CPPFLAGS=['-g'])
 
 env.Append(LIBPATH=[lib_path])
@@ -99,6 +108,9 @@ env.Append(LIBS=['avcodec'])
 env.Append(LIBS=['avutil'])
 env.Append(LIBS=['swscale'])
 env.Append(LIBS=['swresample'])
+if msvc_build:
+    env.Append(LIBS=['WinMM.lib'])
+
 
 sources = list(map(lambda x: '#'+x, glob('src/*.c')))
 

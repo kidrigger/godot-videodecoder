@@ -6,7 +6,7 @@ FROM ubuntu:bionic-20200403
 # download XCode (7.3.1) from https://developer.apple.com/download/more/?name=Xcode%207.3.1
 # extract the sdk tarball using the following instructions:
 # https://github.com/tpoechtrager/osxcross#packing-the-sdk-on-linux---method-2-works-up-to-xcode-73
-ARG XCODE_SDK=./thirdparty/MacOSX10.11.sdk.tar.xz
+ARG XCODE_SDK=
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -28,7 +28,7 @@ RUN git clone --depth=1 https://github.com/tpoechtrager/osxcross.git /opt/osxcro
 COPY ./darwin_sdk/* /opt/osxcross/tarballs/
 
 RUN cmake --version
-RUN cd /opt/osxcross && UNATTENDED=1 ./build.sh
-RUN echo "building gcc"; cd /opt/osxcross && UNATTENDED=1 ./build_gcc.sh
+RUN [ -z "$XCODE_SDK" ] || (cd /opt/osxcross && UNATTENDED=1 ./build.sh) 
+RUN [ -z "$XCODE_SDK" ] || (echo "building gcc"; cd /opt/osxcross && UNATTENDED=1 ./build_gcc.sh)
 
 WORKDIR /opt/godot-videodecoder/

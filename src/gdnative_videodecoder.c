@@ -1,4 +1,8 @@
+#ifdef _MSC_VER
+#include <windows.h>
+#else
 #include <unistd.h>
+#endif
 #include <time.h>
 #include <stdint.h>
 #include <string.h>
@@ -97,6 +101,17 @@ static void _setup_clock() {
 	_clock_scale = ((double)info.numer / (double)info.denom) / 1000.0;
 	_clock_start = mach_absolute_time() * _clock_scale;
 }
+#elif defined(_MSC_VER)
+uint64_t ticks_per_second;
+uint64_t ticks_start;
+static uint64_t get_ticks_usec();
+static void _setup_clock() {
+	// We need to know how often the clock is updated
+	if (!QueryPerformanceFrequency((LARGE_INTEGER *)&ticks_per_second))
+		ticks_per_second = 1000;
+	ticks_start = 0;
+	ticks_start = get_ticks_usec();
+}
 #else
 #if defined(CLOCK_MONOTONIC_RAW) && !defined(JAVASCRIPT_ENABLED) // This is a better clock on Linux.
 #define GODOT_CLOCK CLOCK_MONOTONIC_RAW
@@ -109,8 +124,38 @@ static void _setup_clock() {
 	_clock_start = ((uint64_t)tv_now.tv_nsec / 1000L) + (uint64_t)tv_now.tv_sec * 1000000L;
 }
 #endif
-
 static uint64_t get_ticks_usec() {
+#if defined(_MSC_VER)
+
+	uint64_t ticks;
+
+	// This is the number of clock ticks since start
+	if (!QueryPerformanceCounter((LARGE_INTEGER *)&ticks))
+		ticks = (UINT64)timeGetTime();
+
+	// Divide by frequency to get the time in seconds
+	// original calculation shown below is subject to overflow
+	// with high ticks_per_second and a number of days since the last reboot.
+	// time = ticks * 1000000L / ticks_per_second;
+
+	// we can prevent this by either using 128 bit math
+	// or separating into a calculation for seconds, and the fraction
+	uint64_t seconds = ticks / ticks_per_second;
+
+	// compiler will optimize these two into one divide
+	uint64_t leftover = ticks % ticks_per_second;
+
+	// remainder
+	uint64_t time = (leftover * 1000000L) / ticks_per_second;
+
+	// seconds
+	time += seconds * 1000000L;
+
+	// Subtract the time at game start to get
+	// the time since the game started
+	time -= ticks_start;
+	return time;
+#else
 	#if defined(__APPLE__)
 	uint64_t longtime = mach_absolute_time() * _clock_scale;
 	#else
@@ -121,6 +166,7 @@ static uint64_t get_ticks_usec() {
 	longtime -= _clock_start;
 
 	return longtime;
+#endif
 }
 
 static uint64_t get_ticks_msec() {
