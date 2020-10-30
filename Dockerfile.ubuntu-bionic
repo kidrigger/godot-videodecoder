@@ -1,4 +1,5 @@
-FROM ubuntu:bionic
+FROM ubuntu:bionic-20200403
+
 
 # build environment for osxcross
 
