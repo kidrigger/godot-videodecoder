@@ -30,7 +30,7 @@ pwd = os.environ.get('PWD') or os.getcwd()
 
 osx_renamer = Builder(action = './renamer.py ' + pwd + '/' + lib_path + '/ @loader_path/ "$TOOL_PREFIX" $SOURCE', )
 
-env = Environment(variables=opts, BUILDERS={'OSXRename':osx_renamer}, CFLAGS='' if msvc_build else '-std=gnu11', TARGET_ARCH='x86_64')
+env = Environment(variables=opts, BUILDERS={'OSXRename':osx_renamer}, CFLAGS='/WX' if msvc_build else '-std=gnu11', TARGET_ARCH='x86_64')
 
 if env['toolchainbin']:
     env.PrependENVPath('PATH', env['toolchainbin'])
@@ -114,7 +114,11 @@ if msvc_build:
 
 sources = list(map(lambda x: '#'+x, glob('src/*.c')))
 
-output_dylib = env.SharedLibrary(output_path+'gdnative_videodecoder',sources)
+# msvc doesn't prefix dll files with 'lib'
+libprefix = 'lib' if msvc_build else ''
+if env['debug']:
+    env['PDB'] = output_path+libprefix+'gdnative_videodecoder.pdb'
+output_dylib = env.SharedLibrary(output_path+libprefix+'gdnative_videodecoder',sources)
 
 if env['platform'] == 'osx':
     env.OSXRename(None, output_dylib)
