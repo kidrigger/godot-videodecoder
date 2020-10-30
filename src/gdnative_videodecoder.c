@@ -552,7 +552,7 @@ godot_bool godot_videodecoder_open_file(void *p_data, void *file) {
 	if (input_format == NULL) {
 		_cleanup(data);
 		char msg[512] = {0};
-		snprintf(msg, sizeof(msg) - 1, "Format not recognized: %s (%s)", input_format->name, input_format->long_name);
+		snprintf(msg, sizeof(msg) - 1, "Format not recognized: %s (%s)", probe_data.filename, probe_data.mime_type);
 		api->godot_print_error(msg, "godot_videodecoder_open_file()", __FILE__, __LINE__);
 		return GODOT_FALSE;
 	}
