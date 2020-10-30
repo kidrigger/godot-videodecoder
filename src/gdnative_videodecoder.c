@@ -767,7 +767,7 @@ godot_real godot_videodecoder_get_length(const void *p_data) {
 }
 
 static bool read_frame(videodecoder_data_struct *data) {
-	while (data->video_packet_queue->nb_packets < 8)  {
+	while (data->video_packet_queue->nb_packets < 24)  {
 		AVPacket pkt;
 		int ret = av_read_frame(data->format_ctx, &pkt);
 		if (ret >= 0) {
@@ -803,6 +803,7 @@ void godot_videodecoder_update(void *p_data, godot_real p_delta) {
 		data->audio_time += p_delta;
 	}
 	read_frame(data);
+	PROFILE_END;
 }
 
 godot_pool_byte_array *godot_videodecoder_get_videoframe(void *p_data) {
@@ -861,7 +862,7 @@ retry:
 	// let's discard this frame and get the next frame instead
 	bool drop = ts < data->time - data->diff_tolerance;
 	uint64_t drop_duration = get_ticks_msec() - start;
-	if (drop && drop_duration > max_frame_drop_time && drop_count < min_frame_drop_count) {
+	if (drop && drop_duration > max_frame_drop_time && drop_count < min_frame_drop_count && data->frame_unwrapped) {
 		// only discard frames for max_frame_drop_time ms or we'll slow down the game's main thread!
 		if (fabs(data->seek_time - data->time) > data->diff_tolerance * 10) {
 			char msg[512];
@@ -1048,6 +1049,7 @@ godot_real godot_videodecoder_get_playback_position(const void *p_data) {
 	if (data->format_ctx) {
 		bool use_v_pts = data->frame_yuv->pts != AV_NOPTS_VALUE && data->position_type == POS_V_PTS;
 		bool use_a_time = data->position_type == POS_A_TIME;
+		bool in_update = data->position_type == POS_V_PTS;
 		data->position_type = POS_TIME;
 
 		if (use_v_pts) {
@@ -1058,7 +1060,9 @@ godot_real godot_videodecoder_get_playback_position(const void *p_data) {
 			if (!isnan(data->audio_time) && use_a_time) {
 				return (godot_real)data->audio_time;
 			}
-			return (godot_real)data->time;
+			// fudge the time if we in the first frame after an update but don't have V_PTS yet
+			godot_real adjustment = in_update ? -0.01 : 0.0;
+			return (godot_real)data->time + adjustment;
 		}
 	}
 	return (godot_real)0;
