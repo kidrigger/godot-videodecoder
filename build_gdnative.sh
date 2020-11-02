@@ -16,7 +16,37 @@
 
 DIR="$(cd $(dirname "$0") && pwd)"
 ADDON_BIN_DIR=${ADDON_BIN_DIR:-$DIR/target}
+# COPY can't use variables, so pre-copy the file
+XCODE_SDK_FOR_COPY=./darwin_sdk/MacOSX10.11.sdk.tar.xz
+XCODE_SDK="${XCODE_SDK:-$XCODE_SDK_FOR_COPY}"
 JOBS=${JOBS:-4}
+if [ -f /proc/cpuinfo ]; then
+    JOBS=$(echo "$(cat /proc/cpuinfo  | grep processor |wc -l) - 1" |  bc -l)
+elif type sysctl > /dev/null; then
+    # osx logical cores
+    JOBS=$(sysctl -n hw.ncpu)
+else
+    echo "Unable to determine how many logical cores are available."
+    echo "Using JOBS=$JOBS"
+fi
+echo "Using JOBS=$JOBS"
+
+#img_version="$(git describe 2>/dev/null || git rev-parse HEAD)"
+# TODO : pass in img_version like https://github.com/godotengine/build-containers/blob/master/Dockerfile.osx#L1
+# trusty is for linux builds
+echo "XCODE_SDK=$XCODE_SDK"
+if [ ! -f "$XCODE_SDK" ]; then
+    ls -l "$XCODE_SDK"
+    echo "Unable to find $XCODE_SDK"
+    exit 1
+fi
+if [ ! "$XCODE_SDK" = "$XCODE_SDK_FOR_COPY" ]; then
+    mkdir -p $(dirname "$XCODE_SDK_FOR_COPY")
+    cp "$XCODE_SDK" "$XCODE_SDK_FOR_COPY"
+fi
+
+set -e
+# ideally we'd run these at the same time but ... https://github.com/moby/moby/issues/2776
 docker build ./ -f Dockerfile.ubuntu-xenial -t "godot-videodecoder-ubuntu-xenial"
 docker build ./ -f Dockerfile.ubuntu-bionic -t "godot-videodecoder-ubuntu-bionic"
 docker build ./ -f Dockerfile.osx --build-arg JOBS=$JOBS -t "godot-videodecoder-osx"
