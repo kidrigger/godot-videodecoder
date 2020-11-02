@@ -48,7 +48,8 @@ fi
 set -e
 # ideally we'd run these at the same time but ... https://github.com/moby/moby/issues/2776
 docker build ./ -f Dockerfile.ubuntu-xenial -t "godot-videodecoder-ubuntu-xenial"
-docker build ./ -f Dockerfile.ubuntu-bionic -t "godot-videodecoder-ubuntu-bionic"
+docker build ./ -f Dockerfile.ubuntu-bionic -t "godot-videodecoder-ubuntu-bionic" \
+    --build-arg XCODE_SDK=$XCODE_SDK
 docker build ./ -f Dockerfile.osx --build-arg JOBS=$JOBS -t "godot-videodecoder-osx"
 docker build ./ -f Dockerfile.x11 --build-arg JOBS=$JOBS -t "godot-videodecoder-x11"
 docker build ./ -f Dockerfile.x11_32 --build-arg JOBS=$JOBS -t "godot-videodecoder-x11_32"
