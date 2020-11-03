@@ -16,11 +16,4 @@ WORKDIR /opt/godot-videodecoder
 COPY . .
 RUN scons -c platform=windows
 
-RUN scons platform=windows prefix="${FINAL_TARGET_DIR}"
-
-
-WORKDIR /opt/godot-videodecoder/ffmpeg-static
-RUN ./build.sh -B -p windows -T "$THIRDPARTY_DIR/win32"
-WORKDIR /opt/godot-videodecoder
-RUN scons -c platform=win32
-RUN scons platform=win32 prefix="${FINAL_TARGET_DIR}"
+RUN scons platform=windows prefix="${FINAL_TARGET_DIR}
