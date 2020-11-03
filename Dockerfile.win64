@@ -16,4 +16,4 @@ WORKDIR /opt/godot-videodecoder
 COPY . .
 RUN scons -c platform=windows
 
-RUN scons platform=windows prefix="${FINAL_TARGET_DIR}
+RUN scons platform=windows prefix="${FINAL_TARGET_DIR}"
