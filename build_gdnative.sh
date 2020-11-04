@@ -50,12 +50,11 @@ set -e
 docker build ./ -f Dockerfile.ubuntu-xenial -t "godot-videodecoder-ubuntu-xenial"
 docker build ./ -f Dockerfile.ubuntu-bionic -t "godot-videodecoder-ubuntu-bionic" \
     --build-arg XCODE_SDK=$XCODE_SDK
-
-# bionic is for cross compiles, use xenial for linux
-# (for ubuntu 16 compatibility even though it's outdated already)
 docker build ./ -f Dockerfile.osx --build-arg JOBS=$JOBS -t "godot-videodecoder-osx"
 docker build ./ -f Dockerfile.x11 --build-arg JOBS=$JOBS -t "godot-videodecoder-x11"
+docker build ./ -f Dockerfile.x11_32 --build-arg JOBS=$JOBS -t "godot-videodecoder-x11_32"
 docker build ./ -f Dockerfile.win64 --build-arg JOBS=$JOBS -t "godot-videodecoder-win64"
+docker build ./ -f Dockerfile.win32 --build-arg JOBS=$JOBS -t "godot-videodecoder-win32"
 
 set -x
 # precreate the target directory because otherwise
@@ -67,13 +66,22 @@ id=$(docker create godot-videodecoder-x11)
 docker cp $id:/opt/target/x11 $ADDON_BIN_DIR/
 docker rm -v $id
 
+echo "extracting $ADDON_BIN_DIR/x11_32"
+id=$(docker create godot-videodecoder-x11_32)
+docker cp $id:/opt/target/x11_32 $ADDON_BIN_DIR/
+docker rm -v $id
+
 echo "extracting $ADDON_BIN_DIR/osx"
 id=$(docker create godot-videodecoder-osx)
 docker cp $id:/opt/target/osx $ADDON_BIN_DIR/
 docker rm -v $id
 
-echo "extracting $ADDON_BIN_DIR/wi64"
+echo "extracting $ADDON_BIN_DIR/win64"
 id=$(docker create godot-videodecoder-win64)
 docker cp $id:/opt/target/win64 $ADDON_BIN_DIR/
 docker rm -v $id
 
+echo "extracting $ADDON_BIN_DIR/win32"
+id=$(docker create godot-videodecoder-win32)
+docker cp $id:/opt/target/win32 $ADDON_BIN_DIR/
+docker rm -v $id

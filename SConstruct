@@ -7,7 +7,7 @@ opts = Variables()
 
 opts.Add(BoolVariable('debug','debug build',True))
 opts.Add(BoolVariable('test','copy output to test project',True))
-opts.Add(EnumVariable('platform','can be osx, linux (x11) or windows (win64)','',('osx','x11','win64'),
+opts.Add(EnumVariable('platform','can be osx, linux (x11) or windows (win64)','',('osx','x11','win64','win32','x11_32'),
                                         map={'linux':'x11','windows':'win64'}))
 opts.Add(PathVariable('toolchainbin', 'Path to the cross compiler toolchain bin directory. Only needed cross compiling and the toolchain isn\'t installed.', '', PathVariable.PathAccept))
 opts.Add(PathVariable('thirdparty', 'Path containing the ffmpeg libs', 'thirdparty', PathVariable.PathAccept))
@@ -35,6 +35,10 @@ if env['platform'] == 'x11':
     env.Append(RPATH=env.Literal('\$$ORIGIN'))
     # statically link glibc
     env.Append(LIBS=[File('/usr/lib/x86_64-linux-gnu/libc_nonshared.a')])
+if env['platform'] == 'x11_32':
+    env.Append(RPATH=env.Literal('\$$ORIGIN'))
+    # statically link glibc
+    env.Append(LIBS=[File('/usr/lib/i386-linux-gnu/libc_nonshared.a')])
 
 env.Append(CPPPATH=['#' + include_path + '/'])
 env.Append(CPPPATH=['#godot_include'])
@@ -42,11 +46,12 @@ env.Append(CPPPATH=['#godot_include'])
 tool_prefix = ''
 if os.name == 'posix' and env['platform'] == 'win64':
     tool_prefix = "x86_64-w64-mingw32-"
-    if (os.getenv("MINGW64_PREFIX")):
-        tool_prefix = os.getenv("MINGW64_PREFIX")
     env['SHLIBSUFFIX'] = '.dll'
     env.Append(CPPDEFINES='WIN32')
-
+if os.name == 'posix' and env['platform'] == 'win32':
+    tool_prefix = "i686-w64-mingw32-"
+    env['SHLIBSUFFIX'] = '.dll'
+    env.Append(CPPDEFINES='WIN32')
 if os.name == 'posix' and env['platform'] == 'osx':
     tool_prefix = 'x86_64-apple-darwin' + env['darwinver'] + '-'
     if (os.getenv("OSXCROSS_PREFIX")):
@@ -56,7 +61,9 @@ if os.name == 'posix' and env['platform'] == 'osx':
 globs = {
     'x11': '*.so.[0-9]*',
     'win64': '../bin/*-[0-9]*.dll',
-    'osx': '*.[0-9]*.dylib'
+    'osx': '*.[0-9]*.dylib',
+    'x11_32': '*.so.[0-9]*',
+    'win32': '../bin/*-[0-9]*.dll',
 }
 
 ffmpeg_dylibs = glob(lib_path + '/' + globs[env['platform']])

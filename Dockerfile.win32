@@ -9,11 +9,12 @@ ENV PLUGIN_BIN_DIR=/opt/godot-videodecoder/bin
 ARG JOBS=1
 
 
-RUN ./build.sh -d -p windows
-RUN ./build.sh -B -p windows -T "$THIRDPARTY_DIR/win64" -j $JOBS
+RUN ./build.sh -d -p win32
+RUN ./build.sh -B -p win32 -T "$THIRDPARTY_DIR/win32" -j $JOBS
 WORKDIR /opt/godot-videodecoder
 
 COPY . .
-RUN scons -c platform=windows
+RUN scons -c platform=win32
 
-RUN scons platform=windows prefix="${FINAL_TARGET_DIR}"
+RUN scons platform=win32 prefix="${FINAL_TARGET_DIR}"
+
