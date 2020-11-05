@@ -150,6 +150,16 @@ fi
 
 if [ $plat_x11 ]; then
     echo "extracting $ADDON_BIN_DIR/x11"
+    id=$(docker create godot-videodecoder-x11)
+    docker cp $id:/opt/target/x11 $ADDON_BIN_DIR/
+
+    mkdir -p $THIRDPARTY_DIR/x11
+    # tar because copying a symlink on windows will fail if you don't run as administrator
+    docker cp $id:/opt/godot-videodecoder/thirdparty/x11 - | tar -xC $THIRDPARTY_DIR/
+    docker rm -v $id
+fi
+
+if [ $plat_x11_32 ]; then
     echo "extracting $ADDON_BIN_DIR/x11_32"
     id=$(docker create godot-videodecoder-x11_32)
     docker cp $id:/opt/target/x11_32 $ADDON_BIN_DIR/
