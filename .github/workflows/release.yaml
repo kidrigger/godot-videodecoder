@@ -16,7 +16,7 @@ jobs:
             submodules: recursive
       - name: Build for windows/x11
         run: |
-          PLATFORMS=win64,x11 ./build_gdnative.sh
+          PLATFORMS=win64,x11,win32,x11_32 ./build_gdnative.sh
           zip -r target.zip target
       - name: Create Release
         id: create_release
