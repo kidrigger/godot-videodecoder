@@ -20,7 +20,29 @@ THIRDPARTY_DIR=${THIRDPARTY_DIR:-$DIR/thirdparty}
 # COPY can't use variables, so pre-copy the file
 XCODE_SDK_FOR_COPY=./darwin_sdk/MacOSX10.11.sdk.tar.xz
 XCODE_SDK="${XCODE_SDK:-$XCODE_SDK_FOR_COPY}"
-JOBS=${JOBS:-4}
+
+SUBMODULES_OK=1
+if ! [ -f "$DIR/godot_include/gdnative_api_struct.gen.h" ]; then
+    echo "godot_include headers are missing."
+    echo "    Please run the following:"
+    echo ""
+    echo "    git submodule update --init godot_include"
+    echo ""
+    SUBMODULES_OK=
+fi
+
+if ! [ -f "$DIR/ffmpeg-static/build.sh" ]; then
+    echo "godot_include headers are missing."
+    echo "    Please run the following:"
+    echo ""
+    echo "    git submodule update --init ffmpeg-static"
+    echo ""
+    SUBMODULES_OK=
+fi
+if ! [ $SUBMODULES_OK ]; then
+    echo "Aborting due to missing submodules"
+    exit 1
+fi
 
 if [ -z "$PLATFORMS" ]; then
     PLATFORM_LIST=(win64 osx x11 win32 x11_32)
@@ -42,13 +64,16 @@ plat_x11_32=${PLATMAP['x11_32']}
 plat_win_any=${PLATMAP['win64']}${PLATMAP['win32']}
 plat_x11_any=${PLATMAP['x11']}${PLATMAP['x11_32']}
 
-if [ -f /proc/cpuinfo ]; then
-    JOBS=$(expr $(cat /proc/cpuinfo  | grep processor | wc -l) - 1)
-elif type sysctl > /dev/null; then
-    # osx logical cores
-    JOBS=$(sysctl -n hw.ncpu)
-else
-    echo "Unable to determine how many logical cores are available."
+if ! [ "$JOBS" ]; then
+    if [ -f /proc/cpuinfo ]; then
+        JOBS=$(expr $(cat /proc/cpuinfo  | grep processor | wc -l) - 1)
+    elif type sysctl > /dev/null; then
+        # osx logical cores
+        JOBS=$(sysctl -n hw.ncpu)
+    else
+        JOBS=4
+        echo "Unable to determine how many logical cores are available."
+    fi
 fi
 echo "Using JOBS=$JOBS"
 
@@ -119,7 +144,7 @@ if [ $plat_x11 ]; then
     mkdir -p $THIRDPARTY_DIR/x11
 
     # tar because copying a symlink on windows will fail if you don't run as administrator
-    docker cp $id:/opt/godot-videodecoder/thirdparty/x11 - | tar -xC $THIRDPARTY_DIR/x11/
+    docker cp $id:/opt/godot-videodecoder/thirdparty/x11 - | tar -xC $THIRDPARTY_DIR/
     docker rm -v $id
 fi
 
@@ -131,7 +156,7 @@ if [ $plat_x11 ]; then
 
     mkdir -p $THIRDPARTY_DIR/x11_32
     # tar because copying a symlink on windows will fail if you don't run as administrator
-    docker cp $id:/opt/godot-videodecoder/thirdparty/x11_32 - | tar -xC $THIRDPARTY_DIR/x11_32/
+    docker cp $id:/opt/godot-videodecoder/thirdparty/x11_32 - | tar -xC $THIRDPARTY_DIR/
     docker rm -v $id
 fi
 
@@ -142,7 +167,7 @@ if [ $plat_osx ]; then
 
     mkdir -p $THIRDPARTY_DIR/osx
     # tar because copying a symlink on windows will fail if you don't run as administrator
-    docker cp $id:/opt/godot-videodecoder/thirdparty/osx - | tar -xC $THIRDPARTY_DIR/osx/
+    docker cp $id:/opt/godot-videodecoder/thirdparty/osx - | tar -xC $THIRDPARTY_DIR/
     docker rm -v $id
 fi
 
@@ -153,7 +178,7 @@ if [ $plat_win64 ]; then
 
     mkdir -p $THIRDPARTY_DIR/win64
     # tar because copying a symlink on windows will fail if you don't run as administrator
-    docker cp $id:/opt/godot-videodecoder/thirdparty/win64 - | tar -xC $THIRDPARTY_DIR/win64/
+    docker cp $id:/opt/godot-videodecoder/thirdparty/win64 - | tar -xC $THIRDPARTY_DIR/
     docker rm -v $id
 fi
 
@@ -164,6 +189,14 @@ if [ $plat_win32 ]; then
 
     mkdir -p $THIRDPARTY_DIR/win32
     # tar because copying a symlink on windows will fail if you don't run as administrator
-    docker cp $id:/opt/godot-videodecoder/thirdparty/win64 - | tar -xC $THIRDPARTY_DIR/win32/
+    docker cp $id:/opt/godot-videodecoder/thirdparty/win32 - | tar -xC $THIRDPARTY_DIR/
     docker rm -v $id
+fi
+
+if type tree 2> /dev/null; then
+    tree $THIRDPARTY_DIR -L 2 -hD
+    tree $ADDON_BIN_DIR -hD
+else
+    find $THIRDPARTY_DIR -print -maxdepth 2 -exec ls -lh {} \;
+    find $ADDON_BIN_DIR -print -maxdepth 1 -exec ls -lh {} \;
 fi
