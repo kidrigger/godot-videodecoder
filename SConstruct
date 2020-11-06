@@ -30,7 +30,8 @@ pwd = os.environ.get('PWD') or os.getcwd()
 
 osx_renamer = Builder(action = './renamer.py ' + pwd + '/' + lib_path + '/ @loader_path/ "$TOOL_PREFIX" $SOURCE', )
 
-env = Environment(variables=opts, BUILDERS={'OSXRename':osx_renamer}, CFLAGS='/WX' if msvc_build else '-std=gnu11', TARGET_ARCH='x86_64')
+env = Environment(variables=opts, BUILDERS={'OSXRename':osx_renamer}, CFLAGS='/WX' if msvc_build else '-std=gnu11')
+env.Append(TARGET_ARCH='i386' if env['platform'].endswith('32') else 'x86_64')
 
 if env['toolchainbin']:
     env.PrependENVPath('PATH', env['toolchainbin'])
@@ -47,7 +48,9 @@ if env['platform'] == 'x11':
 if env['platform'] == 'x11_32':
     env.Append(RPATH=env.Literal('\$$ORIGIN'))
     # statically link glibc
-    env.Append(LIBS=[File('/usr/lib/i386-linux-gnu/libc_nonshared.a')])
+    env.Append(LIBS=[File('/usr/lib32/libc_nonshared.a')])
+if env['platform'] == 'win32':
+    env.Append(LIBS=['pthread'])
 
 env.Append(CPPPATH=['#' + include_path + '/'])
 env.Append(CPPPATH=['#godot_include'])

@@ -508,7 +508,7 @@ void godot_videodecoder_destructor(void *p_data) {
 const char **godot_videodecoder_get_supported_ext(int *p_count) {
 	_update_extensions();
 	*p_count = num_supported_ext;
-	return supported_ext;
+	return (const char **)supported_ext;
 }
 
 const char *godot_videodecoder_get_plugin_name(void) {

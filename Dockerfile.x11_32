@@ -1,5 +1,7 @@
 FROM godot-videodecoder-ubuntu-xenial:latest
 
+RUN apt install -y libc6-dev-i386
+
 WORKDIR /opt/godot-videodecoder/ffmpeg-static
 COPY ./ffmpeg-static .
 # download dependencies
