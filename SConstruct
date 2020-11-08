@@ -49,6 +49,8 @@ if env['platform'] == 'x11_32':
     env.Append(RPATH=env.Literal('\$$ORIGIN'))
     # statically link glibc
     env.Append(LIBS=[File('/usr/lib32/libc_nonshared.a')])
+    env.Append(CFLAGS=['-m32'])
+    env.Append(LINKFLAGS=['-m32'])
 if env['platform'] == 'win32':
     env.Append(LIBS=['pthread'])
 
