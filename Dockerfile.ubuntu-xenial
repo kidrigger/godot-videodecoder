@@ -1,4 +1,4 @@
-FROM ubuntu:xenial
+FROM ubuntu:xenial-20200326
 
 #build environment for ubuntu with older glibc
 ENV DEBIAN_FRONTEND=noninteractive

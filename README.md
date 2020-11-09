@@ -5,9 +5,18 @@ using the [FFmpeg](https://ffmpeg.org) library for codecs.
 
 **A GSoC 2018 Project**
 
-This project is set up so that a game developer can build x11, windows and osx plugin libraries with a single script. The build enviroment has been dockerized for portability. Building has been tested on macos (catalina) and linux.
+This project is set up so that a game developer can build x11, windows and osx plugin libraries with a single script. The build enviroment has been dockerized for portability. Building has been tested on linux and windows 10 pro with WSL2.
 
 The most difficult part of building the plugin libraries is extracting the macos sdk from the XCode download since it [can't be distributed directly](https://www.apple.com/legal/sla/docs/xcode.pdf).
+
+**Releases**
+
+Release builds should automatically be available [here](/releases/latest) on github.
+
+**Media Support**
+
+The current dockerized ffmpeg build supports VP9 decoding only. Support for other decoders could be added, PRs are welcome.
+Patent encumbered codecs like [h264/h265](https://www.mpegla.com/wp-content/uploads/avcweb.pdf) will always be missing in the automatic builds due to copyright issues and the [cost of distributing pre-built binaries](https://jina-liu.medium.com/settle-your-questions-about-h-264-license-cost-once-and-for-all-hopefully-a058c2149256#5e65).
 
 ## Instructions to build with docker
 
@@ -47,3 +56,5 @@ TODO:
 * instructions for running the test project
 * Add a benchmark to the test project
 * Input for additional ffmpeg flags/deps
+* Re-enable additional media formats with the ability to build only a subset
+* OSX build in releases via github actions
