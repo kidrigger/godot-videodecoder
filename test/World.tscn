@@ -1,6 +1,5 @@
-[gd_scene load_steps=3 format=2]
+[gd_scene load_steps=2 format=2]
 
-[ext_resource path="res://samples/2Thursday-FortiMonitor-vp9.webm" type="VideoStream" id=1]
 [ext_resource path="res://World.gd" type="Script" id=2]
 
 [node name="World" type="Control"]
@@ -14,11 +13,7 @@ __meta__ = {
 [node name="VideoPlayer" type="VideoPlayer" parent="."]
 anchor_right = 1.0
 anchor_bottom = 1.0
-margin_left = 3.05267
-margin_top = -4.05264
-margin_right = 3.05273
 margin_bottom = -52.0526
-stream = ExtResource( 1 )
 __meta__ = {
 "_edit_use_anchors_": false
 }
@@ -27,11 +22,22 @@ __meta__ = {
 anchor_top = 1.0
 anchor_right = 1.0
 anchor_bottom = 1.0
+margin_left = 83.0
 margin_top = -48.0
 percent_visible = false
+__meta__ = {
+"_edit_use_anchors_": false
+}
 
 [node name="Label" type="Label" parent="ProgressBar"]
 anchor_right = 1.0
 anchor_bottom = 1.0
 align = 1
 valign = 1
+
+[node name="MenuButton" type="MenuButton" parent="."]
+anchor_top = 1.0
+anchor_bottom = 1.0
+margin_top = -48.0
+margin_right = 76.0
+text = "Open"

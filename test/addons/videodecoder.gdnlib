@@ -9,10 +9,15 @@ reloadable=false
 
 OSX.64="res://addons/bin/osx/libgdnative_videodecoder.dylib"
 Windows.64="res://addons/bin/win64/libgdnative_videodecoder.dll"
+Windows.32="res://addons/bin/win32/libgdnative_videodecoder.dll"
 X11.64="res://addons/bin/x11/libgdnative_videodecoder.so"
+X11.32="res://addons/bin/x11_32/libgdnative_videodecoder.so"
+
 
 [dependencies]
 
 OSX.64=[ "res://addons/bin/osx/libavformat.58.dylib", "res://addons/bin/osx/libavutil.56.dylib", "res://addons/bin/osx/libavcodec.58.dylib", "res://addons/bin/osx/libswscale.5.dylib", "res://addons/bin/osx/libswresample.3.dylib" ]
 Windows.64=[ "res://addons/bin/win64/avformat-58.dll", "res://addons/bin/win64/avutil-56.dll", "res://addons/bin/win64/avcodec-58.dll", "res://addons/bin/win64/swscale-5.dll", "res://addons/bin/win64/swresample-3.dll", "res://addons/bin/win64/libwinpthread-1.dll" ]
+Windows.32=[ "res://addons/bin/win32/avformat-58.dll", "res://addons/bin/win32/avutil-56.dll", "res://addons/bin/win32/avcodec-58.dll", "res://addons/bin/win64/swscale-5.dll", "res://addons/bin/win32/swresample-3.dll", "res://addons/bin/win32/libwinpthread-1.dll" ]
 X11.64=[ "res://addons/bin/x11/libavformat.so.58", "res://addons/bin/x11/libavutil.so.56", "res://addons/bin/x11/libavcodec.so.58", "res://addons/bin/x11/libswscale.so.5", "res://addons/bin/x11/libswresample.so.3" ]
+X11.32=[ "res://addons/bin/x11_32/libavformat.so.58", "res://addons/bin/x11_32/libavutil.so.56", "res://addons/bin/x11_32/libavcodec.so.58", "res://addons/bin/x11_32/libswscale.so.5", "res://addons/bin/x11_32/libswresample.so.3" ]

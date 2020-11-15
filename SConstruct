@@ -53,6 +53,7 @@ if env['platform'] == 'x11_32':
     env.Append(LINKFLAGS=['-m32'])
 if env['platform'] == 'win32':
     env.Append(LIBS=['pthread'])
+    env.Append(LINKFLAGS=['-static-libgcc'])
 
 env.Append(CPPPATH=['#' + include_path + '/'])
 env.Append(CPPPATH=['#godot_include'])

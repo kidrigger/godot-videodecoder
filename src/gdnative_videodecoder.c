@@ -530,13 +530,6 @@ godot_bool godot_videodecoder_open_file(void *p_data, void *file) {
 
 	godot_int read_bytes = videodecoder_api->godot_videodecoder_file_read(file, data->io_buffer, IO_BUFFER_SIZE);
 
-	if (read_bytes < IO_BUFFER_SIZE) {
-		// something went wrong, we should be able to read atleast one buffer length.
-		_cleanup(data);
-		api->godot_print_warning("File less then minimum buffer.", "godot_videodecoder_open_file()", __FILE__, __LINE__);
-		return GODOT_FALSE;
-	}
-
 	// Rewind to 0
 	videodecoder_api->godot_videodecoder_file_seek(file, 0, SEEK_SET);
 
