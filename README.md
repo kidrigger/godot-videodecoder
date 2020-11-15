@@ -49,7 +49,7 @@ git submodule update --init --recursive
 * To use a different MacOSX*.*.sdk.tar.gz sdk set the XCODE_SDK environment variable. <!-- TODO: test this -->
 * e.g. `XCODE_SDK=$PWD/darwin_sdk/MacOSX10.15.sdk.tar.gz ./build_gdnative.sh`
 
-5. run `build_gdnative.sh`
+5. run `build_gdnative.sh` (Be sure to [add your user to the `docker` group](https://docs.docker.com/engine/install/linux-postinstall/) or you will have to run as `sudo` (which is bad))
 
 TODO:
 
