@@ -1,4 +1,8 @@
+#ifdef _MSC_VER
+#include <windows.h>
+#else
 #include <unistd.h>
+#endif
 #include <time.h>
 #include <stdint.h>
 #include <string.h>
@@ -85,7 +89,7 @@ extern const godot_videodecoder_interface_gdnative plugin_interface;
 
 static const char *plugin_name = "ffmpeg_videoplayer";
 static int num_supported_ext = 0;
-static const char **supported_ext = NULL;
+static char **supported_ext = NULL;
 
 /// Clock Setup function (used by get_ticks_usec)
 static uint64_t _clock_start = 0;
@@ -96,6 +100,17 @@ static void _setup_clock() {
 	kern_return_t ret = mach_timebase_info(&info);
 	_clock_scale = ((double)info.numer / (double)info.denom) / 1000.0;
 	_clock_start = mach_absolute_time() * _clock_scale;
+}
+#elif defined(_MSC_VER)
+uint64_t ticks_per_second;
+uint64_t ticks_start;
+static uint64_t get_ticks_usec();
+static void _setup_clock() {
+	// We need to know how often the clock is updated
+	if (!QueryPerformanceFrequency((LARGE_INTEGER *)&ticks_per_second))
+		ticks_per_second = 1000;
+	ticks_start = 0;
+	ticks_start = get_ticks_usec();
 }
 #else
 #if defined(CLOCK_MONOTONIC_RAW) && !defined(JAVASCRIPT_ENABLED) // This is a better clock on Linux.
@@ -109,8 +124,38 @@ static void _setup_clock() {
 	_clock_start = ((uint64_t)tv_now.tv_nsec / 1000L) + (uint64_t)tv_now.tv_sec * 1000000L;
 }
 #endif
-
 static uint64_t get_ticks_usec() {
+#if defined(_MSC_VER)
+
+	uint64_t ticks;
+
+	// This is the number of clock ticks since start
+	if (!QueryPerformanceCounter((LARGE_INTEGER *)&ticks))
+		ticks = (UINT64)timeGetTime();
+
+	// Divide by frequency to get the time in seconds
+	// original calculation shown below is subject to overflow
+	// with high ticks_per_second and a number of days since the last reboot.
+	// time = ticks * 1000000L / ticks_per_second;
+
+	// we can prevent this by either using 128 bit math
+	// or separating into a calculation for seconds, and the fraction
+	uint64_t seconds = ticks / ticks_per_second;
+
+	// compiler will optimize these two into one divide
+	uint64_t leftover = ticks % ticks_per_second;
+
+	// remainder
+	uint64_t time = (leftover * 1000000L) / ticks_per_second;
+
+	// seconds
+	time += seconds * 1000000L;
+
+	// Subtract the time at game start to get
+	// the time since the game started
+	time -= ticks_start;
+	return time;
+#else
 	#if defined(__APPLE__)
 	uint64_t longtime = mach_absolute_time() * _clock_scale;
 	#else
@@ -121,6 +166,7 @@ static uint64_t get_ticks_usec() {
 	longtime -= _clock_start;
 
 	return longtime;
+#endif
 }
 
 static uint64_t get_ticks_msec() {
@@ -294,7 +340,7 @@ static void _update_extensions() {
 
 	list_t ext_list = set_create_list(sup_ext_set);
 	num_supported_ext = list_size(&ext_list);
-	supported_ext = (const char **)api->godot_alloc(sizeof(char *) * num_supported_ext);
+	supported_ext = (char **)api->godot_alloc(sizeof(char *) * num_supported_ext);
 	list_node_t *cur_node = ext_list.start;
 	int i = 0;
 	while (cur_node != NULL) {
@@ -462,7 +508,7 @@ void godot_videodecoder_destructor(void *p_data) {
 const char **godot_videodecoder_get_supported_ext(int *p_count) {
 	_update_extensions();
 	*p_count = num_supported_ext;
-	return supported_ext;
+	return (const char **)supported_ext;
 }
 
 const char *godot_videodecoder_get_plugin_name(void) {
@@ -484,13 +530,6 @@ godot_bool godot_videodecoder_open_file(void *p_data, void *file) {
 
 	godot_int read_bytes = videodecoder_api->godot_videodecoder_file_read(file, data->io_buffer, IO_BUFFER_SIZE);
 
-	if (read_bytes < IO_BUFFER_SIZE) {
-		// something went wrong, we should be able to read atleast one buffer length.
-		_cleanup(data);
-		api->godot_print_warning("File less then minimum buffer.", "godot_videodecoder_open_file()", __FILE__, __LINE__);
-		return GODOT_FALSE;
-	}
-
 	// Rewind to 0
 	videodecoder_api->godot_videodecoder_file_seek(file, 0, SEEK_SET);
 
@@ -506,7 +545,7 @@ godot_bool godot_videodecoder_open_file(void *p_data, void *file) {
 	if (input_format == NULL) {
 		_cleanup(data);
 		char msg[512] = {0};
-		snprintf(msg, sizeof(msg) - 1, "Format not recognized: %s (%s)", input_format->name, input_format->long_name);
+		snprintf(msg, sizeof(msg) - 1, "Format not recognized: %s (%s)", probe_data.filename, probe_data.mime_type);
 		api->godot_print_error(msg, "godot_videodecoder_open_file()", __FILE__, __LINE__);
 		return GODOT_FALSE;
 	}
@@ -721,7 +760,7 @@ godot_real godot_videodecoder_get_length(const void *p_data) {
 }
 
 static bool read_frame(videodecoder_data_struct *data) {
-	while (data->video_packet_queue->nb_packets < 8)  {
+	while (data->video_packet_queue->nb_packets < 24)  {
 		AVPacket pkt;
 		int ret = av_read_frame(data->format_ctx, &pkt);
 		if (ret >= 0) {
@@ -757,6 +796,7 @@ void godot_videodecoder_update(void *p_data, godot_real p_delta) {
 		data->audio_time += p_delta;
 	}
 	read_frame(data);
+	PROFILE_END;
 }
 
 godot_pool_byte_array *godot_videodecoder_get_videoframe(void *p_data) {
@@ -815,11 +855,11 @@ retry:
 	// let's discard this frame and get the next frame instead
 	bool drop = ts < data->time - data->diff_tolerance;
 	uint64_t drop_duration = get_ticks_msec() - start;
-	if (drop && drop_duration > max_frame_drop_time && drop_count < min_frame_drop_count) {
+	if (drop && drop_duration > max_frame_drop_time && drop_count < min_frame_drop_count && data->frame_unwrapped) {
 		// only discard frames for max_frame_drop_time ms or we'll slow down the game's main thread!
 		if (fabs(data->seek_time - data->time) > data->diff_tolerance * 10) {
 			char msg[512];
-			snprintf(msg, sizeof(msg) -1, "Slow CPU? Dropped  %d frames for %ldms frame dropped: %ld/%ld (%.1f%%) pts=%.1f t=%.1f",
+			snprintf(msg, sizeof(msg) -1, "Slow CPU? Dropped  %d frames for %"PRId64"ms frame dropped: %lu/%lu (%.1f%%) pts=%.1f t=%.1f",
 				(int)drop_count,
 				drop_duration,
 				data->drop_frame,
@@ -1002,6 +1042,7 @@ godot_real godot_videodecoder_get_playback_position(const void *p_data) {
 	if (data->format_ctx) {
 		bool use_v_pts = data->frame_yuv->pts != AV_NOPTS_VALUE && data->position_type == POS_V_PTS;
 		bool use_a_time = data->position_type == POS_A_TIME;
+		bool in_update = data->position_type == POS_V_PTS;
 		data->position_type = POS_TIME;
 
 		if (use_v_pts) {
@@ -1012,7 +1053,9 @@ godot_real godot_videodecoder_get_playback_position(const void *p_data) {
 			if (!isnan(data->audio_time) && use_a_time) {
 				return (godot_real)data->audio_time;
 			}
-			return (godot_real)data->time;
+			// fudge the time if we in the first frame after an update but don't have V_PTS yet
+			godot_real adjustment = in_update ? -0.01 : 0.0;
+			return (godot_real)data->time + adjustment;
 		}
 	}
 	return (godot_real)0;

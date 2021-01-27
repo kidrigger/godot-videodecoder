@@ -7,3 +7,6 @@ thirdparty/
 .import/
 .DS_Store
 .test/addons/bin
+*.obj
+*.dll
+/target

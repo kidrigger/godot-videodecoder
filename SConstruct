@@ -7,7 +7,7 @@ opts = Variables()
 
 opts.Add(BoolVariable('debug','debug build',True))
 opts.Add(BoolVariable('test','copy output to test project',True))
-opts.Add(EnumVariable('platform','can be osx, linux (x11) or windows (win64)','',('osx','x11','win64'),
+opts.Add(EnumVariable('platform','can be osx, linux (x11) or windows (win64)','',('osx','x11','win64','win32','x11_32'),
                                         map={'linux':'x11','windows':'win64'}))
 opts.Add(PathVariable('toolchainbin', 'Path to the cross compiler toolchain bin directory. Only needed cross compiling and the toolchain isn\'t installed.', '', PathVariable.PathAccept))
 opts.Add(PathVariable('thirdparty', 'Path containing the ffmpeg libs', 'thirdparty', PathVariable.PathAccept))
@@ -17,17 +17,27 @@ opts.Add(EnumVariable('darwinver', 'Darwin SDK version. (if cross compiling from
 #probably a better way to do this instead of creating Enviroment() twice
 early_env=Environment(variables=opts, BUILDERS={})
 lib_prefix = early_env['thirdparty'] + '/' + early_env['platform']
-lib_path = lib_prefix + '/lib'
+
+msvc_build = os.name == 'nt'
+if msvc_build:
+    lib_path = lib_prefix + '/bin'
+else:
+    lib_path = lib_prefix + '/lib'
 include_path = lib_prefix + '/include'
 # probably a better way to do this too (pass $TOOL_PREFIX)
-osx_renamer = Builder(action = './renamer.py ' + os.environ.get('PWD') + '/' + lib_path + '/ @loader_path/ "$TOOL_PREFIX" $SOURCE', )
-env = Environment(variables=opts, BUILDERS={'OSXRename':osx_renamer}, CFLAGS='-std=gnu11')
+# PWD is not present in windows
+pwd = os.environ.get('PWD') or os.getcwd()
+
+osx_renamer = Builder(action = './renamer.py ' + pwd + '/' + lib_path + '/ @loader_path/ "$TOOL_PREFIX" $SOURCE', )
+
+env = Environment(variables=opts, BUILDERS={'OSXRename':osx_renamer}, CFLAGS='/WX' if msvc_build else '-std=gnu11')
+env.Append(TARGET_ARCH='i386' if env['platform'].endswith('32') else 'x86_64')
 
 if env['toolchainbin']:
     env.PrependENVPath('PATH', env['toolchainbin'])
 output_path = '#bin/' + env['platform'] + '/'
 
-if env['debug']:
+if env['debug'] and not msvc_build:
     env.Append(CPPFLAGS=['-g'])
 
 env.Append(LIBPATH=[lib_path])
@@ -35,6 +45,15 @@ if env['platform'] == 'x11':
     env.Append(RPATH=env.Literal('\$$ORIGIN'))
     # statically link glibc
     env.Append(LIBS=[File('/usr/lib/x86_64-linux-gnu/libc_nonshared.a')])
+if env['platform'] == 'x11_32':
+    env.Append(RPATH=env.Literal('\$$ORIGIN'))
+    # statically link glibc
+    env.Append(LIBS=[File('/usr/lib32/libc_nonshared.a')])
+    env.Append(CFLAGS=['-m32'])
+    env.Append(LINKFLAGS=['-m32'])
+if env['platform'] == 'win32':
+    env.Append(LIBS=['pthread'])
+    env.Append(LINKFLAGS=['-static-libgcc'])
 
 env.Append(CPPPATH=['#' + include_path + '/'])
 env.Append(CPPPATH=['#godot_include'])
@@ -42,11 +61,12 @@ env.Append(CPPPATH=['#godot_include'])
 tool_prefix = ''
 if os.name == 'posix' and env['platform'] == 'win64':
     tool_prefix = "x86_64-w64-mingw32-"
-    if (os.getenv("MINGW64_PREFIX")):
-        tool_prefix = os.getenv("MINGW64_PREFIX")
     env['SHLIBSUFFIX'] = '.dll'
     env.Append(CPPDEFINES='WIN32')
-
+if os.name == 'posix' and env['platform'] == 'win32':
+    tool_prefix = "i686-w64-mingw32-"
+    env['SHLIBSUFFIX'] = '.dll'
+    env.Append(CPPDEFINES='WIN32')
 if os.name == 'posix' and env['platform'] == 'osx':
     tool_prefix = 'x86_64-apple-darwin' + env['darwinver'] + '-'
     if (os.getenv("OSXCROSS_PREFIX")):
@@ -56,7 +76,9 @@ if os.name == 'posix' and env['platform'] == 'osx':
 globs = {
     'x11': '*.so.[0-9]*',
     'win64': '../bin/*-[0-9]*.dll',
-    'osx': '*.[0-9]*.dylib'
+    'osx': '*.[0-9]*.dylib',
+    'x11_32': '*.so.[0-9]*',
+    'win32': '../bin/*-[0-9]*.dll',
 }
 
 ffmpeg_dylibs = glob(lib_path + '/' + globs[env['platform']])
@@ -92,10 +114,17 @@ env.Append(LIBS=['avcodec'])
 env.Append(LIBS=['avutil'])
 env.Append(LIBS=['swscale'])
 env.Append(LIBS=['swresample'])
+if msvc_build:
+    env.Append(LIBS=['WinMM.lib'])
+
 
 sources = list(map(lambda x: '#'+x, glob('src/*.c')))
 
-output_dylib = env.SharedLibrary(output_path+'gdnative_videodecoder',sources)
+# msvc doesn't prefix dll files with 'lib'
+libprefix = 'lib' if msvc_build else ''
+if env['debug']:
+    env['PDB'] = output_path+libprefix+'gdnative_videodecoder.pdb'
+output_dylib = env.SharedLibrary(output_path+libprefix+'gdnative_videodecoder',sources)
 
 if env['platform'] == 'osx':
     env.OSXRename(None, output_dylib)
