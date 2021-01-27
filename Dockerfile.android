@@ -1,0 +1,26 @@
+FROM godot-videodecoder-ubuntu-xenial:latest
+RUN dpkg --add-architecture i386; apt update
+
+RUN apt install -y libc6-dev-i386 libgl1-mesa-dev:i386
+
+WORKDIR /opt/godot-videodecoder/ffmpeg-static
+COPY ./ffmpeg-static .
+# download dependencies
+RUN ./build.sh -d -p android
+
+ARG JOBS=1
+ENV JOBS=$JOBS
+ENV THIRDPARTY_DIR=/opt/godot-videodecoder/thirdparty
+RUN ./build.sh -B -p android -T "$THIRDPARTY_DIR/android" -j $JOBS
+
+ENV FINAL_TARGET_DIR=/opt/target
+ENV PLUGIN_BIN_DIR=/opt/godot-videodecoder/bin
+
+WORKDIR /opt/godot-videodecoder
+
+COPY . .
+RUN ./build_android.sh
+RUN ldd /opt/target/libs/x86/libgdnative_videodecoder.so
+RUN ldd /opt/target/libs/x86_64/libgdnative_videodecoder.so
+RUN ldd /opt/target/libs/armv7a/libgdnative_videodecoder.so
+RUN ldd /opt/target/libs/arm64-v8/libgdnative_videodecoder.so

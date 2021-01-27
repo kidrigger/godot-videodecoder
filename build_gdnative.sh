@@ -45,7 +45,7 @@ if ! [ $SUBMODULES_OK ]; then
 fi
 
 if [ -z "$PLATFORMS" ]; then
-    PLATFORM_LIST=(win64 osx x11 win32 x11_32)
+    PLATFORM_LIST=(win64 osx x11 win32 x11_32 android)
 else
     IFS=',' read -r -a PLATFORM_LIST <<< "$PLATFORMS"
 fi
@@ -63,6 +63,7 @@ plat_x11=${PLATMAP['x11']}
 plat_x11_32=${PLATMAP['x11_32']}
 plat_win_any=${PLATMAP['win64']}${PLATMAP['win32']}
 plat_x11_any=${PLATMAP['x11']}${PLATMAP['x11_32']}
+plat_android=${PLATMAP['android']}
 
 if ! [ "$JOBS" ]; then
     if [ -f /proc/cpuinfo ]; then
@@ -99,6 +100,10 @@ if [ $plat_x11_any ]; then
     docker build ./ -f Dockerfile.ubuntu-xenial -t "godot-videodecoder-ubuntu-xenial"
 fi
 
+if [ $plat_android ]; then
+    docker build ./ -f Dockerfile.ubuntu-xenial -t "godot-videodecoder-ubuntu-xenial"
+fi
+
 # bionic is for cross compiles, use xenial for linux
 # (for ubuntu 16 compatibility even though it's outdated already)
 if [ $plat_osx ]; then
@@ -128,7 +133,9 @@ fi
 if [ $plat_win32 ]; then
     docker build ./ -f Dockerfile.win32 --build-arg JOBS=$JOBS -t "godot-videodecoder-win32"
 fi
-
+if [ $plat_android ]; then
+    docker build ./ -f Dockerfile.android --build-arg JOBS=$JOBS -t "godot-videodecoder-android"
+fi
 set -x
 # precreate the target directory because otherwise
 # docker cp will copy x11/* -> $ADDON_BIN_DIR/* instead of x11/* -> $ADDON_BIN_DIR/x11/*
@@ -141,14 +148,14 @@ if [ "$(uname -o)" = "Msys" ]; then
 fi
 
 # TODO: this should be a loop over all the platforms
-if [ $plat_x11 ]; then
-    echo "extracting $ADDON_BIN_DIR/x11"
-    id=$(docker create godot-videodecoder-x11)
-    docker cp $id:/opt/target/x11 $ADDON_BIN_DIR/
-    mkdir -p $THIRDPARTY_DIR/x11
+if [ $plat_android ]; then
+    echo "extracting $ADDON_BIN_DIR/android"
+    id=$(docker create godot-videodecoder-android)
+    docker cp $id:/opt/target/android $ADDON_BIN_DIR/
+    mkdir -p $THIRDPARTY_DIR/android
 
     # tar because copying a symlink on windows will fail if you don't run as administrator
-    docker cp -L $id:/opt/godot-videodecoder/thirdparty/x11 - | tar -xhC $THIRDPARTY_DIR/
+    docker cp -L $id:/opt/godot-videodecoder/thirdparty/android - | tar -xhC $THIRDPARTY_DIR/
     docker rm -v $id
 fi
 
