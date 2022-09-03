@@ -14,6 +14,7 @@ RUN apt-get update && \
     apt-get install -y cmake git patch clang \
     libbz2-dev fuse libfuse-dev libxml2-dev gcc g++ \
     zlib1g-dev libmpc-dev libmpfr-dev libgmp-dev libc++-dev \
+    libx264-dev \
     libssl-dev curl bc wget \
     autoconf automake libtool make yasm nasm \
     scons mingw-w64 mingw-w64-tools

@@ -1,4 +1,4 @@
-FROM ubuntu:xenial-20200326
+FROM ubuntu:bionic
 
 #build environment for ubuntu with older glibc
 ENV DEBIAN_FRONTEND=noninteractive
@@ -43,9 +43,11 @@ RUN apt install -y autoconf \
   libxcb-shm0-dev \
   libxcb-xfixes0-dev \
   libxvidcore-dev \
+  libx264-dev \
   pkg-config \
   texi2html \
   zlib1g-dev \
+  nasm \
   mingw-w64-tools \
   wget
 

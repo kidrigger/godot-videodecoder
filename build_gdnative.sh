@@ -18,8 +18,10 @@ DIR="$(cd $(dirname "$0") && pwd)"
 ADDON_BIN_DIR=${ADDON_BIN_DIR:-$DIR/target}
 THIRDPARTY_DIR=${THIRDPARTY_DIR:-$DIR/thirdparty}
 # COPY can't use variables, so pre-copy the file
-XCODE_SDK_FOR_COPY=./darwin_sdk/MacOSX10.11.sdk.tar.xz
+XCODE_SDK_FOR_COPY=./darwin_sdk/MacOSX12.3.sdk.tar.xz
 XCODE_SDK="${XCODE_SDK:-$XCODE_SDK_FOR_COPY}"
+# set FF_ENABLE=everything to make a 14MiB build with all the LGPL features
+FF_ENABLE="vp8 vp9 opus vorbis"
 
 SUBMODULES_OK=1
 if ! [ -f "$DIR/godot_include/gdnative_api_struct.gen.h" ]; then
