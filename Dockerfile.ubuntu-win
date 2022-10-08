@@ -1,0 +1,19 @@
+FROM ubuntu:bionic-20200403
+
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && \
+    apt-get install -y cmake git patch clang \
+    libbz2-dev fuse libfuse-dev libxml2-dev gcc g++ \
+    zlib1g-dev libmpc-dev libmpfr-dev libgmp-dev libc++-dev \
+    libx264-dev \
+    libssl-dev curl bc wget \
+    autoconf automake libtool make yasm nasm \
+    scons mingw-w64 mingw-w64-tools
+
+# use posix variant of mingw
+RUN update-alternatives --set x86_64-w64-mingw32-gcc /usr/bin/x86_64-w64-mingw32-gcc-posix
+RUN update-alternatives --set x86_64-w64-mingw32-g++ /usr/bin/x86_64-w64-mingw32-g++-posix
+
+WORKDIR /opt/godot-videodecoder/

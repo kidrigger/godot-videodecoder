@@ -98,18 +98,18 @@ fi
 set -e
 # ideally we'd run these at the same time but ... https://github.com/moby/moby/issues/2776
 if [ $plat_x11_any ]; then
-    docker build ./ -f Dockerfile.ubuntu-xenial -t "godot-videodecoder-ubuntu-xenial"
+    docker build ./ -f Dockerfile.ubuntu-x11 -t "godot-videodecoder-ubuntu-x11"
 fi
 
 # bionic is for cross compiles, use xenial for linux
 # (for ubuntu 16 compatibility even though it's outdated already)
 if [ $plat_osx ]; then
     echo "building with xcode sdk"
-    docker build ./ -f Dockerfile.ubuntu-bionic -t "godot-videodecoder-ubuntu-bionic" \
+    docker build ./ -f Dockerfile.ubuntu-osx -t "godot-videodecoder-ubuntu-osx" \
     --build-arg XCODE_SDK=$XCODE_SDK
 elif [ $plat_win_any ]; then
     echo "building without xcode sdk"
-    docker build ./ -f Dockerfile.ubuntu-bionic -t "godot-videodecoder-ubuntu-bionic"
+    docker build ./ -f Dockerfile.ubuntu-win -t "godot-videodecoder-ubuntu-win"
 fi
 
 if [ $plat_osx ]; then

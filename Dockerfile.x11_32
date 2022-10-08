@@ -1,4 +1,4 @@
-FROM godot-videodecoder-ubuntu-xenial:latest
+FROM godot-videodecoder-ubuntu-x11:latest
 RUN dpkg --add-architecture i386; apt update
 
 RUN apt install -y libc6-dev-i386 libgl1-mesa-dev:i386 gcc-multilib

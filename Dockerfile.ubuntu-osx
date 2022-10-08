@@ -11,17 +11,17 @@ ARG XCODE_SDK=
 ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && \
-    apt-get install -y cmake git patch clang \
+    apt-get install -y cmake git patch clang-10 \
     libbz2-dev fuse libfuse-dev libxml2-dev gcc g++ \
     zlib1g-dev libmpc-dev libmpfr-dev libgmp-dev libc++-dev \
     libx264-dev \
     libssl-dev curl bc wget \
     autoconf automake libtool make yasm nasm \
-    scons mingw-w64 mingw-w64-tools
+    scons
 
-# use posix variant of mingw
-RUN update-alternatives --set x86_64-w64-mingw32-gcc /usr/bin/x86_64-w64-mingw32-gcc-posix
-RUN update-alternatives --set x86_64-w64-mingw32-g++ /usr/bin/x86_64-w64-mingw32-g++-posix
+# Ubuntu installs it as clang-10; do a symlink
+RUN ln -s /usr/bin/clang-10 /usr/bin/clang
+RUN ln -s /usr/bin/clang++-10 /usr/bin/clang++
 
 RUN git clone --depth=1 https://github.com/tpoechtrager/osxcross.git /opt/osxcross
 
@@ -29,7 +29,7 @@ RUN git clone --depth=1 https://github.com/tpoechtrager/osxcross.git /opt/osxcro
 COPY ./darwin_sdk/* /opt/osxcross/tarballs/
 
 RUN cmake --version
-RUN [ -z "$XCODE_SDK" ] || (cd /opt/osxcross && UNATTENDED=1 ./build.sh) 
+RUN [ -z "$XCODE_SDK" ] || (cd /opt/osxcross && UNATTENDED=1 ./build.sh)
 RUN [ -z "$XCODE_SDK" ] || (echo "building gcc"; cd /opt/osxcross && UNATTENDED=1 ./build_gcc.sh)
 
 WORKDIR /opt/godot-videodecoder/

@@ -1,4 +1,4 @@
-FROM godot-videodecoder-ubuntu-xenial:latest
+FROM godot-videodecoder-ubuntu-x11:latest
 
 WORKDIR /opt/godot-videodecoder/ffmpeg-static
 COPY ./ffmpeg-static .
