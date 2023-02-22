@@ -425,7 +425,7 @@ void GDN_EXPORT godot_gdnative_init(godot_gdnative_init_options *p_options) {
 			default: break;
 		}
 	}
-	print_codecs();
+	//print_codecs();
 }
 
 void GDN_EXPORT godot_gdnative_terminate(godot_gdnative_terminate_options *p_options) {
