@@ -15,7 +15,7 @@ ARG JOBS
 
 # godot deps
 RUN apt update && \
-    apt install -y build-essential scons pkg-config libx11-dev libxcursor-dev libxinerama-dev \
+    apt install -y build-essential pkg-config libx11-dev libxcursor-dev libxinerama-dev \
     libgl1-mesa-dev libglu-dev libasound2-dev libpulse-dev libudev-dev libxi-dev libxrandr-dev yasm
 # ffmpeg deps: may be some duplicates
 RUN apt install -y autoconf \
@@ -52,3 +52,7 @@ RUN apt install -y autoconf \
   wget
 
 RUN apt install -y ocl-icd-opencl-dev
+
+# Get scons from pip because the distro's one is too old
+RUN apt install -y python3-pip
+RUN pip3 install scons

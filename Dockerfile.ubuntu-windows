@@ -10,10 +10,14 @@ RUN apt-get update && \
     libx264-dev \
     libssl-dev curl bc wget \
     autoconf automake libtool make yasm nasm \
-    scons mingw-w64 mingw-w64-tools
+    mingw-w64 mingw-w64-tools
 
 # use posix variant of mingw
 RUN update-alternatives --set x86_64-w64-mingw32-gcc /usr/bin/x86_64-w64-mingw32-gcc-posix
 RUN update-alternatives --set x86_64-w64-mingw32-g++ /usr/bin/x86_64-w64-mingw32-g++-posix
+
+# Get scons from pip because the distro's one is too old
+RUN apt install -y python3-pip
+RUN pip3 install scons
 
 WORKDIR /opt/godot-videodecoder/

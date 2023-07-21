@@ -1,8 +1,0 @@
-/*
- * This won't compile yet.
- */
-
-#ifndef FFMPEG_GDNATIVE_VIDEODECODER_H
-#define FFMPEG_GDNATIVE_VIDEODECODER_H
-
-#endif /* FFMPEG_GDNATIVE_VIDEODECODER_H */

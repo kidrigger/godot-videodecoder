@@ -1,6 +1,7 @@
-[submodule "godot_include"]
-	path = godot_include
-	url = https://github.com/GodotNativeTools/godot_headers.git
+[submodule "godot-cpp"]
+	path = godot-cpp
+	url = https://github.com/godotengine/godot-cpp
+	branch = 4.1
 [submodule "build-containers"]
 	path = build-containers
 	url = https://github.com/godotengine/build-containers.git

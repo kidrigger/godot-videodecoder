@@ -1,3 +1,6 @@
+> **Warning**
+> This addon is originally a GDNative/Godot 3.x addon. This was manually ported to GDExtension/Godot 4.1 out of necessity due to no good alternatives at the time of writing. More than before, this code comes with **no warranty** and **no support**. "Here be dragons", use at your own risk.
+
 This is a fork that setups automatic CI to compile FFMPEG with libx264, enabling playback of MP4 media files.
 
 Changes made:
@@ -8,7 +11,7 @@ Changes made:
   - Detach `ffmpeg-static` from submodule, since changes are very small
   - Removed test project to save space
 
-Run `build_gdnative_all.sh` to compile for all three platforms (details below).
+Run `build_gdextension_all.sh` to compile for all three platforms (details below).
 
 This repository will not provide pre-built libraries due to x264 licensing troubles.
 

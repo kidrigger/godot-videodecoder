@@ -1,6 +1,5 @@
 FROM ubuntu:bionic-20200403
 
-
 # build environment for osxcross
 
 # download XCode (7.3.1) from https://developer.apple.com/download/more/?name=Xcode%207.3.1
@@ -16,12 +15,15 @@ RUN apt-get update && \
     zlib1g-dev libmpc-dev libmpfr-dev libgmp-dev libc++-dev \
     libx264-dev \
     libssl-dev curl bc wget \
-    autoconf automake libtool make yasm nasm \
-    scons
+    autoconf automake libtool make yasm nasm
 
 # Ubuntu installs it as clang-10; do a symlink
 RUN ln -s /usr/bin/clang-10 /usr/bin/clang
 RUN ln -s /usr/bin/clang++-10 /usr/bin/clang++
+
+# Get scons from pip because the distro's one is too old
+RUN apt install -y python3-pip
+RUN pip3 install scons
 
 RUN git clone --depth=1 https://github.com/tpoechtrager/osxcross.git /opt/osxcross
 
