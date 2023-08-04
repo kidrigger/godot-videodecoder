@@ -191,9 +191,10 @@ if env['platform'] == 'linux':
         env.Append(LINKFLAGS=['-m32'])
     #else:
     #    env.Append(LIBS=[File('/usr/lib/libc_nonshared.a')])
-if env['platform'] == 'windows' and env['bits'] == '32':
+if env['platform'] == 'windows':
     env.Append(LIBS=['pthread'])
     env.Append(LINKFLAGS=['-static-libgcc'])
+    env.Append(LINKFLAGS=['-static-libstdc++'])
 
 tool_prefix = ''
 if os.name == 'posix' and env['platform'] == 'windows' and env['bits'] == '64':
