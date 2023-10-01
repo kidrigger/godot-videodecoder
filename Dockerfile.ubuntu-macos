@@ -1,4 +1,4 @@
-FROM ubuntu:focal
+FROM ubuntu:bionic-20200403
 
 # build environment for osxcross
 
@@ -10,18 +10,24 @@ ARG XCODE_SDK=
 ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && \
-    apt-get install -y cmake git patch clang \
+    apt-get install -y cmake git patch clang-10 \
     libbz2-dev fuse libfuse-dev libxml2-dev gcc g++ \
     zlib1g-dev libmpc-dev libmpfr-dev libgmp-dev libc++-dev \
     libx264-dev \
     libssl-dev curl bc wget \
     autoconf automake libtool make yasm nasm
 
+# Ubuntu installs it as clang-10; do a symlink
+RUN ln -s /usr/bin/clang-10 /usr/bin/clang
+RUN ln -s /usr/bin/clang++-10 /usr/bin/clang++
+
 # Get scons from pip because the distro's one is too old
 RUN apt install -y python3-pip
 RUN pip3 install scons
 
-RUN git clone --depth=1 https://github.com/tpoechtrager/osxcross.git /opt/osxcross
+RUN git clone https://github.com/tpoechtrager/osxcross.git /opt/osxcross
+
+RUN bash -c "pushd /opt/osxcross && git fetch --all && git checkout 3279f86379074f8c6f1114e0211b955fc2b1ba0c && popd"
 
 # TODO: ln this from a volume instead?
 COPY ./darwin_sdk/* /opt/osxcross/tarballs/

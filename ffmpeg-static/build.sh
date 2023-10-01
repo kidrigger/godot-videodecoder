@@ -431,7 +431,7 @@ export PKG_CONFIG_PATH="$TARGET_DIR/lib/pkgconfig${cc_pkg_config_path}"
   --enable-shared --disable-static \
   --enable-opengl \
   ${enable_features[@]} \
-  $cross_platform_flags
+  $cross_platform_flags || cat ffbuild/config.log
 #  --enable-libmfx \
 
 PATH="$BIN_DIR:$PATH" make -j $jval
