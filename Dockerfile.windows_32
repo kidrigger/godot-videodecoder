@@ -2,7 +2,6 @@ FROM godot-videodecoder-ubuntu-windows:latest
 
 WORKDIR /opt/godot-cpp
 COPY ./godot-cpp .
-RUN scons -c
 RUN scons platform=windows arch=x86_32 target=template_release
 
 WORKDIR /opt/godot-videodecoder/ffmpeg-static
@@ -20,5 +19,4 @@ ENV PLUGIN_BIN_DIR=/opt/godot-videodecoder/bin
 
 WORKDIR /opt/godot-videodecoder
 COPY . .
-RUN scons -c
 RUN scons platform=windows bits=32 target=template_release godot_cpp_path=/opt/godot-cpp target_path="${FINAL_TARGET_DIR}"

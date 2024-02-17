@@ -47,7 +47,7 @@ if ! [ $SUBMODULES_OK ]; then
 fi
 
 if [ -z "$PLATFORMS" ]; then
-    PLATFORM_LIST=(windows_32 windows_64 macos linux_64 linux_32)
+    PLATFORM_LIST=(windows_32 windows_64 macos_x86 macos_arm64 linux_64 linux_32)
 else
     IFS=',' read -r -a PLATFORM_LIST <<< "$PLATFORMS"
 fi
@@ -60,10 +60,12 @@ echo "Building for ${PLATFORM_LIST[@]}"
 
 plat_windows_64=${PLATMAP['windows_64']}
 plat_windows_32=${PLATMAP['windows_32']}
-plat_macos=${PLATMAP['macos']}
+plat_macos_x86=${PLATMAP['macos_x86']}
+plat_macos_arm64=${PLATMAP['macos_arm64']}
 plat_linux_64=${PLATMAP['linux_64']}
 plat_linux_32=${PLATMAP['linux_32']}
 plat_windows_any=${PLATMAP['windows_64']}${PLATMAP['windows_32']}
+plat_macos_any=${PLATMAP['macos_x86']}${PLATMAP['macos_arm64']}
 plat_linux_any=${PLATMAP['linux_64']}${PLATMAP['linux_32']}
 
 if ! [ "$JOBS" ]; then
@@ -82,7 +84,7 @@ echo "Using JOBS=$JOBS"
 #img_version="$(git describe 2>/dev/null || git rev-parse HEAD)"
 # TODO : pass in img_version like https://github.com/godotengine/build-containers/blob/master/Dockerfile.osx#L1
 
-if [ $plat_macos ]; then
+if [ $plat_macos_any ]; then
     echo "XCODE_SDK=$XCODE_SDK"
     if [ ! -f "$XCODE_SDK" ]; then
         ls -l "$XCODE_SDK"
@@ -103,7 +105,7 @@ fi
 
 # bionic is for cross compiles, use xenial for linux
 # (for ubuntu 16 compatibility even though it's outdated already)
-if [ $plat_macos ]; then
+if [ $plat_macos_any ]; then
     echo "building with xcode sdk"
     docker build ./ -f Dockerfile.ubuntu-macos -t "godot-videodecoder-ubuntu-macos" \
     --build-arg XCODE_SDK=$XCODE_SDK
@@ -112,9 +114,13 @@ elif [ $plat_windows_any ]; then
     docker build ./ -f Dockerfile.ubuntu-windows -t "godot-videodecoder-ubuntu-windows"
 fi
 
-if [ $plat_macos ]; then
-    echo "Building for macOS"
-    docker build ./ -f Dockerfile.macos --build-arg JOBS=$JOBS -t "godot-videodecoder-macos"
+if [ $plat_macos_x86 ]; then
+    echo "Building for macOS - x86_64"
+    docker build ./ -f Dockerfile.macos_x86 --build-arg JOBS=$JOBS -t "godot-videodecoder-macos_x86"
+fi
+if [ $plat_macos_arm64 ]; then
+    echo "Building for macOS - arm64"
+    docker build ./ -f Dockerfile.macos_arm64 --build-arg JOBS=$JOBS -t "godot-videodecoder-macos_arm64"
 fi
 if [ $plat_linux_64 ]; then
     echo "Building for Linux - 64 bits"
@@ -178,14 +184,25 @@ if [ $plat_linux_32 ]; then
     docker rm -v $id
 fi
 
-if [ $plat_macos ]; then
-    echo "extracting $ADDON_BIN_DIR/macos"
-    id=$(docker create godot-videodecoder-macos)
-    docker cp $id:/opt/target/macos $ADDON_BIN_DIR/
+if [ $plat_macos_x86 ]; then
+    echo "extracting $ADDON_BIN_DIR/macos_x86"
+    id=$(docker create godot-videodecoder-macos_x86)
+    docker cp $id:/opt/target/macos_x86 $ADDON_BIN_DIR/
 
-    mkdir -p $THIRDPARTY_DIR/macos
+    mkdir -p $THIRDPARTY_DIR/macos_x86
     # tar because copying a symlink on windows will fail if you don't run as administrator
-    docker cp -L $id:/opt/godot-videodecoder/thirdparty/macos - | tar -xhC $THIRDPARTY_DIR/
+    docker cp -L $id:/opt/godot-videodecoder/thirdparty/macos_x86 - | tar -xhC $THIRDPARTY_DIR/
+    docker rm -v $id
+fi
+
+if [ $plat_macos_arm64 ]; then
+    echo "extracting $ADDON_BIN_DIR/macos_arm64"
+    id=$(docker create godot-videodecoder-macos_arm64)
+    docker cp $id:/opt/target/macos_arm64 $ADDON_BIN_DIR/
+
+    mkdir -p $THIRDPARTY_DIR/macos_arm64
+    # tar because copying a symlink on windows will fail if you don't run as administrator
+    docker cp -L $id:/opt/godot-videodecoder/thirdparty/macos_arm64 - | tar -xhC $THIRDPARTY_DIR/
     docker rm -v $id
 fi
 

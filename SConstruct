@@ -21,7 +21,7 @@ opts = Variables([], ARGUMENTS)
 # Define our options
 opts.Add(EnumVariable("target", "Compilation target", "template_debug", ["template_debug", "template_release"]))
 opts.Add(EnumVariable("platform", "Compilation platform", host_platform, ["", "windows", "macos", "linux"]))
-opts.Add(EnumVariable("bits", "Target platform bits", "64", ("32", "64")))
+opts.Add(EnumVariable("bits", "Target platform bits", "64", ("32", "64", "arm64")))
 opts.Add(BoolVariable("use_llvm", "Use the LLVM / Clang compiler", "no"))
 opts.Add(PathVariable('toolchainbin', 'Path to the cross compiler toolchain bin directory. Only needed cross compiling and the toolchain isn\'t installed.', '', PathVariable.PathAccept))
 opts.Add(PathVariable("target_path", "The path where the lib is installed.", "target/", PathVariable.PathAccept))
@@ -83,11 +83,10 @@ if env["target"] in ("template_debug"):
 
 # Check our platform specifics
 if env["platform"] == "macos":
-    env["target_path"] += "/macos/"
+    env["target_path"] += "/macos_%s/" % ("arm64" if env["bits"] == "arm64" else "x86")
     godotcpp_library += ".macos"
-    env.Append(CCFLAGS=["-arch", "x86_64"])
     env.Append(CXXFLAGS=["-std=c++17"])
-    env.Append(LINKFLAGS=["-arch", "x86_64", "-ldl"])
+    env.Append(LINKFLAGS=["-ldl"])
     if env["target"] in ("template_debug"):
         env.Append(CCFLAGS=["-g", "-O2"])
     else:
@@ -124,11 +123,13 @@ godotcpp_library += ".%s" % env["target"]
 
 if env["bits"] == "32":
     godotcpp_library += ".x86_32"
-else:
+elif env["bits"] == "64":
     godotcpp_library += ".x86_64"
+elif env["bits"] == "arm64":
+    godotcpp_library += ".arm64"
 
 if env["platform"] == "macos":
-    lib_prefix = "%s/%s" % (env['thirdparty_path'], env['platform'])
+    lib_prefix = "%s/%s_%s" % (env['thirdparty_path'], env['platform'], "arm64" if env['bits'] == 'arm64' else "x86")
 else:
     lib_prefix = "%s/%s_%s" % (env['thirdparty_path'], env['platform'], env['bits'])
 
@@ -206,7 +207,11 @@ if os.name == 'posix' and env['platform'] == 'windows' and env['bits'] == '32':
     env['SHLIBSUFFIX'] = '.dll'
     env.Append(CPPDEFINES='WIN32')
 if os.name == 'posix' and env['platform'] == 'macos':
-    tool_prefix = 'x86_64-apple-darwin' + env['darwinver'] + '-'
+    if env['bits'] == 'arm64':
+        tool_prefix = 'arm64-apple-darwin'
+    else:
+        tool_prefix = 'x86_64-apple-darwin'
+    tool_prefix += env['darwinver'] + '-'
     if (os.getenv("OSXCROSS_PREFIX")):
         tool_prefix = os.getenv('OSXCROSS_PREFIX')
     env['SHLIBSUFFIX'] = '.dylib'

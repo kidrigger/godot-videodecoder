@@ -1,4 +1,4 @@
-> **Warning**
+> [!WARNING]
 > This addon is originally a GDNative/Godot 3.x addon. This was manually ported to GDExtension/Godot 4.1 out of necessity due to no good alternatives at the time of writing. More than before, this code comes with **no warranty** and **no support**. "Here be dragons", use at your own risk.
 
 This is a fork that setups automatic CI to compile FFMPEG with libx264, enabling playback of MP4 media files.
@@ -6,6 +6,7 @@ This is a fork that setups automatic CI to compile FFMPEG with libx264, enabling
 Changes made:
   - Updated `build_containers` to 3.5 branch
   - MacOS SDK updated to 12.3 (`darwin21.4`)
+  - Add support for arm64 on MacOS (M1 chips)
   - Updated Ubuntu distro from `xenial` to `bionic`
   - Enabled compilation of `libx264`
   - Detach `ffmpeg-static` from submodule, since changes are very small

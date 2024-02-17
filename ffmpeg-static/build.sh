@@ -69,7 +69,7 @@ do
       echo " -s: Build with debug and symbols" >&2
       echo " -B: force reconfigure and rebuild" >&2 # not sure this makes a difference
       echo " -T: set final target for installing ffmpeg libs" >&2
-      echo " -p: set cross compile platform (windows|win32|darwin|x11_32)" >&2
+      echo " -p: set cross compile platform (windows|win32|darwin|darwin_arm64|x11_32)" >&2
       exit 2
       ;;
   esac
@@ -119,8 +119,8 @@ cc_triplet=
 cc_extra_libs=
 cc_lib_prefix=
 cc_dep_lib_extra=
-cc_cross_env=
 cc_pkg_config_path=
+macos_compiler=
 if [ ! -z "$cross_platform" ]; then
   case $cross_platform in
     'win32')
@@ -160,21 +160,29 @@ if [ ! -z "$cross_platform" ]; then
       cross_platform_flags="--disable-vaapi --disable-vdpau --arch=$arch"
       ;;
     'darwin')
+      ;&
+    'darwin_arm64')
       platform=darwin
+      arch=x86_64
+      if [ $cross_platform = "darwin_arm64" ]; then
+        arch=arm64
+      fi
       d_sdk=darwin21.4
-      cc_triplet=x86_64-apple-$d_sdk
+      cc_triplet=$arch-apple-$d_sdk
       # 19 is catalina
-      cc_cross_env=$cc_triplet-
-      cc_platform=x86_64-$d_sdk-gcc #x86_64-apple-$d_sdk-clang
       cc_dep_lib_extra="LDFLAGS=-lm"
       accel_opts="--enable-opencl"
-      cross_platform_flags="$accel_opts --arch=x86_64 --target-os=$platform --cross-prefix=$cc_triplet- --install-name-dir=@loader_path"
+      cross_platform_flags="$accel_opts --arch=$arch --target-os=darwin --cross-prefix=$cc_triplet- --install-name-dir=@loader_path"
       if [ -z "$OSXCROSS_BIN_DIR" ] || [ ! -d "$OSXCROSS_BIN_DIR" ]; then
         echo "Unable to find osxcross bin directory [$OSXCROSS_BIN_DIR]: $(ls -l OSXCROSS_BIN_DIR)"
         exit 1
       fi
       PATH=$OSXCROSS_BIN_DIR:$PATH
       export OSXCROSS_PKG_CONFIG_USE_NATIVE_VARIABLES=1
+      # Force Clang to be used (needed for arm64, but doesn't hurt for x86_64 too)
+      export CC=$OSXCROSS_BIN_DIR/$cc_triplet-clang
+      export CXX=$OSXCROSS_BIN_DIR/$cc_triplet-clang++
+      macos_compiler="--cc=$CC --cxx=$CXX"
       ;;
     '')
     ;;
@@ -350,10 +358,17 @@ if [ $no_build_deps -eq 1 ]; then
   echo "Skipping dependencies"
 else
 
+# Download updated config.guess and config.sub for new platforms (like arm64/MacOS M1)
+mkdir -p $BUILD_DIR/config-scripts
+wget -O $BUILD_DIR/config-scripts/config.guess 'https://git.savannah.gnu.org/gitweb/?p=config.git;a=blob_plain;f=config.guess;hb=HEAD'
+wget -O $BUILD_DIR/config-scripts/config.sub 'https://git.savannah.gnu.org/gitweb/?p=config.git;a=blob_plain;f=config.sub;hb=HEAD'
+
 if [ $is_x86 -eq 1 ]; then
   echo "*** Building yasm ***"
   cd $BUILD_DIR/yasm*
   [ $rebuild -eq 1 -a -f Makefile ] && make distclean || true
+  cp $BUILD_DIR/config-scripts/config.guess config/config.guess
+  cp $BUILD_DIR/config-scripts/config.sub config/config.sub
   [ ! -f config.status ] && ./configure --prefix=$TARGET_DIR --bindir=$BIN_DIR $cc_flags
   make -j $jval
   make install
@@ -369,6 +384,8 @@ fi
 echo "*** Building opus ***"
 cd $BUILD_DIR/opus*
 [ $rebuild -eq 1 -a -f Makefile ] && make distclean || true
+cp $BUILD_DIR/config-scripts/config.guess config.guess
+cp $BUILD_DIR/config-scripts/config.sub config.sub
 [ ! -f config.status ] && ./configure --prefix=$TARGET_DIR --disable-shared --with-pic \
   --enable-intrinsics --disable-extra-programs \
   $cc_flags $cc_dep_lib_extra
@@ -379,6 +396,8 @@ echo "*** Building libogg ***"
 cd $BUILD_DIR/ogg*
 [ $rebuild -eq 1 -a -f Makefile ] && make distclean || true
 ./autogen.sh
+cp $BUILD_DIR/config-scripts/config.guess config.guess
+cp $BUILD_DIR/config-scripts/config.sub config.sub
 ./configure --prefix=$TARGET_DIR --disable-shared --with-pic $cc_flags
 make -j $jval
 make install
@@ -387,6 +406,8 @@ echo "*** Building libvorbis ***"
 cd $BUILD_DIR/vorbis*
 [ $rebuild -eq 1 -a -f Makefile ] && make distclean || true
 ./autogen.sh
+cp $BUILD_DIR/config-scripts/config.guess config.guess
+cp $BUILD_DIR/config-scripts/config.sub config.sub
 ./configure --prefix=$TARGET_DIR --disable-shared --with-pic $cc_flags \
   --disable-oggtest --disable-examples --disable-docs $cc_dep_lib_extra
 echo $PATH
@@ -396,6 +417,8 @@ make install
 echo "*** Building libx264 ***"
 cd $BUILD_DIR/x264*
 [ $rebuild -eq 1 -a -f Makefile ] && make distclean || true
+cp $BUILD_DIR/config-scripts/config.guess config.guess
+cp $BUILD_DIR/config-scripts/config.sub config.sub
 if [ ! -z "$cc_triplet" ] && [ ! $cross_platform = "x11_32" ]; then
   ./configure --prefix=$TARGET_DIR --bindir="$BIN_DIR" --enable-pic --enable-static --extra-cflags="-I$TARGET_DIR/include $cc_cflags" --extra-ldflags="-L$TARGET_DIR/lib $cc_ldflags" --cross-prefix=$cc_triplet- --host=$cc_triplet
 elif [ $is_x86 -eq 1 ]; then
@@ -416,7 +439,8 @@ cd $BUILD_DIR/FFmpeg*
 EXTRA_LIBS="$cc_lib_prefix -lpthread -lm $cc_extra_libs" # -lz
 export PKG_CONFIG_PATH="$TARGET_DIR/lib/pkgconfig${cc_pkg_config_path}"
 
-
+cp $BUILD_DIR/config-scripts/config.guess config.guess
+cp $BUILD_DIR/config-scripts/config.sub config.sub
 ./configure \
   --prefix="$FINAL_TARGET_DIR" \
   --pkg-config-flags="--static" \
@@ -431,7 +455,8 @@ export PKG_CONFIG_PATH="$TARGET_DIR/lib/pkgconfig${cc_pkg_config_path}"
   --enable-shared --disable-static \
   --enable-opengl \
   ${enable_features[@]} \
-  $cross_platform_flags || cat ffbuild/config.log
+  $cross_platform_flags \
+  $macos_compiler || cat ffbuild/config.log
 #  --enable-libmfx \
 
 PATH="$BIN_DIR:$PATH" make -j $jval
