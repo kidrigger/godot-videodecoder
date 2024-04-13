@@ -1,5 +1,7 @@
 > [!WARNING]
-> This addon is originally a GDNative/Godot 3.x addon. This was manually ported to GDExtension/Godot 4.1 out of necessity due to no good alternatives at the time of writing. More than before, this code comes with **no warranty** and **no support**. "Here be dragons", use at your own risk.
+> **This repository is now archived and won't see any further development.**
+> This addon is originally a [GDNative/Godot 3.x](https://github.com/kidrigger/godot-videodecoder) addon. This was manually ported to GDExtension/Godot 4.1 out of necessity as at the time there were no good alternatives.
+> [EIRTeam.FFmpeg](https://github.com/EIRTeam/EIRTeam.FFmpeg/) is an alternative that is currently maintained, and therefore recommended. Therefore this repository is now archived, and this code comes with **no warranty** and **no support**. "Here be dragons", use at your own risk.
 
 This is a fork that setups automatic CI to compile FFMPEG with libx264, enabling playback of MP4 media files.
 
